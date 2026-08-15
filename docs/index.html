@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="QuantWatch 多资产量化研究终端：真实加密K线、指标、策略、观察列表与市场扫描。" />
   <title>QuantWatch Research Terminal</title>
-  <link rel="stylesheet" href="./research.css?v=09fe390" />
+  <link rel="stylesheet" href="./research.css?v=chart-ledger-v2" />
 </head>
 <body>
   <main class="shell">
@@ -46,6 +46,7 @@
         <div class="chart-head"><div><div class="asset-title" id="asset-meta">正在加载标的…</div><div class="asset-meta" id="research-mode">数据模式：Cloudflare 云端缓存 · 真实K线 · 浏览器端指标计算</div></div><div class="quote"><strong id="price">—</strong><span id="research-time">—</span></div></div>
         <div class="chart-wrap"><div id="chart" class="chart" aria-label="K线图"></div></div>
         <div class="chart-foot"><div class="status-line"><i class="live-dot"></i><span id="load-status">等待数据…</span></div><span id="research-source">—</span></div>
+        <section class="panel trade-ledger trade-ledger-inline" aria-labelledby="ledger-title"><div class="ledger-head"><div><h2 id="ledger-title">逐笔交易复盘</h2><p id="ledger-status">运行策略回测后，将显示入场、初始与最终止损、止盈、离场理由、实际盈亏和风险回报。</p></div></div><div class="table-wrap"><table class="ledger-table"><thead><tr><th>#</th><th>方向</th><th>入场</th><th>初始止损</th><th>最终止损</th><th>止盈</th><th>离场</th><th>离场理由</th><th>实际盈亏</th><th>实际 R</th><th>持仓</th><th>入场依据</th></tr></thead><tbody id="trade-ledger-rows"><tr><td colspan="12" class="empty-state">尚未运行策略回测。</td></tr></tbody></table></div></section>
       </section>
 
       <aside class="panel right"><div class="right-content">
@@ -57,7 +58,6 @@
       </div></aside>
     </section>
 
-    <section class="panel trade-ledger" aria-labelledby="ledger-title"><div class="ledger-head"><div><h2 id="ledger-title">逐笔交易复盘</h2><p id="ledger-status">运行策略回测后，将显示入场、初始与最终止损、止盈、离场理由、实际盈亏和风险回报。</p></div></div><div class="table-wrap"><table class="ledger-table"><thead><tr><th>#</th><th>方向</th><th>入场</th><th>初始止损</th><th>最终止损</th><th>止盈</th><th>离场</th><th>离场理由</th><th>实际盈亏</th><th>实际 R</th><th>持仓</th><th>入场依据</th></tr></thead><tbody id="trade-ledger-rows"><tr><td colspan="12" class="empty-state">尚未运行策略回测。</td></tr></tbody></table></div></section>
 
     <section class="panel scanner" aria-labelledby="scanner-title">
       <div class="scanner-head"><div><h2 id="scanner-title">市场扫描</h2><p>以当前策略及已选择周期扫描 10 个公开加密资产与本会话中已导入真实 CSV 的标的；仅显示可取得的真实 OHLCV 数据。</p></div><button id="run-scan" type="button">扫描当前策略</button></div>
