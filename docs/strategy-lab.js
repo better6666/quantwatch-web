@@ -13,7 +13,17 @@
     td_exhaustion: { name: '神奇九转衰竭', family: '反转', description: 'TD9 出现后只研究逆势衰竭，不将其单独视为交易信号。' },
     fib_reclaim: { name: '斐波那契回撤', family: '关键位', description: '价格在 38.2%、50% 或 61.8% 关键位附近重新收复时研究。' },
     range_fade: { name: '区间反转', family: '区间', description: '在低趋势、低波动状态下，于近 30 根K线区间边缘研究反转。' },
-    volatility_expansion: { name: '波动率扩张', family: '突破', description: 'ATR 相对价格放大且价格突破近期区间时研究趋势延续。' }
+    volatility_expansion: { name: '波动率扩张', family: '突破', description: 'ATR 相对价格放大且价格突破近期区间时研究趋势延续。' },
+    adx_dmi_trend: { name: 'ADX / DMI 趋势', family: '趋势', description: 'ADX 大于阈值且 +DI、-DI 出现方向优势时研究趋势延续。' },
+    aroon_breakout: { name: 'Aroon 趋势突破', family: '趋势', description: 'Aroon Up / Down 拉开差值后研究趋势启动和延续。' },
+    keltner_squeeze: { name: 'Keltner 挤压突破', family: '波动率', description: '价格脱离 Keltner 通道时研究波动率扩张。' },
+    mfi_reversal: { name: 'MFI 资金流反转', family: '资金流', description: 'MFI 进入极端区间后观察资金流反转。' },
+    williams_swing: { name: 'Williams %R 摆动', family: '动量', description: 'Williams %R 从超买超卖区域回归时研究短周期摆动。' },
+    roc_acceleration: { name: 'ROC 加速度', family: '动量', description: 'ROC 穿越零轴且 MACD 同向时研究价格加速度。' },
+    obv_confirmation: { name: 'OBV 量价确认', family: '资金流', description: 'OBV 趋势与价格趋势一致时研究量价确认。' },
+    cmf_pressure: { name: 'CMF 资金压力', family: '资金流', description: 'CMF 穿越零轴并与价格方向一致时研究资金流压力。' },
+    pivot_reclaim: { name: '枢轴点收复', family: '关键位', description: '价格重新站上或跌破前一根枢轴点时研究关键位反应。' },
+    vwap_reclaim: { name: 'VWAP 回归', family: '资金流', description: '价格重新收复或跌破 VWAP 时研究日内价值区域的方向变化。' }
   };
   const get = id => document.getElementById(id);
   const n = value => Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -76,6 +86,16 @@
     if (recipe === 'td_exhaustion') return indicators.td.buy[i] === 9 ? 1 : indicators.td.sell[i] === 9 ? -1 : 0;
     if (recipe === 'fib_reclaim') { const levels = Object.values(indicators.fibonacci.levels); const level = levels.reduce((near, value) => Math.abs(close - value) < Math.abs(close - near) ? value : near, levels[0]); return Math.abs(close / level - 1) < 0.006 ? (close >= level && previous < level ? 1 : close <= level && previous > level ? -1 : 0) : 0; }
     if (recipe === 'range_fade') return close <= low30 * 1.002 && indicators.rsi[i] < 40 ? 1 : close >= high30 * 0.998 && indicators.rsi[i] > 60 ? -1 : 0;
+    if (recipe === 'adx_dmi_trend') return indicators.adx[i] > 22 && indicators.plusDI[i] > indicators.minusDI[i] ? 1 : indicators.adx[i] > 22 && indicators.minusDI[i] > indicators.plusDI[i] ? -1 : 0;
+    if (recipe === 'aroon_breakout') return indicators.aroonUp[i] > 70 && indicators.aroonUp[i] - indicators.aroonDown[i] > 35 ? 1 : indicators.aroonDown[i] > 70 && indicators.aroonDown[i] - indicators.aroonUp[i] > 35 ? -1 : 0;
+    if (recipe === 'keltner_squeeze') return close > indicators.keltnerUpper[i] ? 1 : close < indicators.keltnerLower[i] ? -1 : 0;
+    if (recipe === 'mfi_reversal') return indicators.mfi[i] < 20 ? 1 : indicators.mfi[i] > 80 ? -1 : 0;
+    if (recipe === 'williams_swing') return indicators.williams[i] > -80 && indicators.williams[i - 1] <= -80 ? 1 : indicators.williams[i] < -20 && indicators.williams[i - 1] >= -20 ? -1 : 0;
+    if (recipe === 'roc_acceleration') return indicators.roc[i] > 0 && indicators.roc[i - 1] <= 0 && indicators.histogram[i] > 0 ? 1 : indicators.roc[i] < 0 && indicators.roc[i - 1] >= 0 && indicators.histogram[i] < 0 ? -1 : 0;
+    if (recipe === 'obv_confirmation') return indicators.obv[i] > indicators.obv[i - 5] && close > indicators.sma20[i] ? 1 : indicators.obv[i] < indicators.obv[i - 5] && close < indicators.sma20[i] ? -1 : 0;
+    if (recipe === 'cmf_pressure') return indicators.cmf[i] > 0 && indicators.cmf[i - 1] <= 0 ? 1 : indicators.cmf[i] < 0 && indicators.cmf[i - 1] >= 0 ? -1 : 0;
+    if (recipe === 'pivot_reclaim') return close > indicators.pivots[i] && candles[i - 1].close <= indicators.pivots[i - 1] ? 1 : close < indicators.pivots[i] && candles[i - 1].close >= indicators.pivots[i - 1] ? -1 : 0;
+    if (recipe === 'vwap_reclaim') return close > indicators.vwap[i] && candles[i - 1].close <= indicators.vwap[i - 1] ? 1 : close < indicators.vwap[i] && candles[i - 1].close >= indicators.vwap[i - 1] ? -1 : 0;
     return indicators.atr[i] / close > 0.012 && close > high20 ? 1 : indicators.atr[i] / close > 0.012 && close < low20 ? -1 : 0;
   }
   function compositeSignal(i, candles, indicators, config) {
