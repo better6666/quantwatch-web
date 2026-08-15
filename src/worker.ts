@@ -49,7 +49,7 @@ export interface Env {
 
 const CACHE_KEY = "quantwatch:latest-snapshot:v1";
 const ONE_DAY_SECONDS = 86_400;
-const SUPPORTED_INTERVALS = new Set(["4h", "1d"]);
+const SUPPORTED_INTERVALS = new Set(["1h", "4h", "1d"]);
 const CANDLE_CACHE_TTL_SECONDS = 300;
 const MAX_SYNC_BODY_BYTES = 256_000;
 const MAX_SYNC_ITEMS = 500;
@@ -57,12 +57,11 @@ const makeAssets = (entries: ReadonlyArray<readonly [string, string, string]>, a
   entries.map(([id, symbol, name]) => ({ id, symbol, name, assetClass, provider, availability }));
 
 const ASSETS: AssetDescriptor[] = [
-  ...makeAssets([["BTCUSDT", "BTC/USDT", "Bitcoin"], ["ETHUSDT", "ETH/USDT", "Ethereum"], ["SOLUSDT", "SOL/USDT", "Solana"], ["BNBUSDT", "BNB/USDT", "BNB"], ["XRPUSDT", "XRP/USDT", "XRP"], ["ADAUSDT", "ADA/USDT", "Cardano"], ["DOGEUSDT", "DOGE/USDT", "Dogecoin"], ["AVAXUSDT", "AVAX/USDT", "Avalanche"], ["LINKUSDT", "LINK/USDT", "Chainlink"], ["DOTUSDT", "DOT/USDT", "Polkadot"]], "crypto", "CoinGecko OHLC（云端缓存）", "public"),
+  ...makeAssets([["BTCUSDT", "BTC/USD", "Bitcoin"], ["ETHUSDT", "ETH/USD", "Ethereum"], ["SOLUSDT", "SOL/USD", "Solana"], ["BNBUSDT", "BNB/USD", "BNB"], ["XRPUSDT", "XRP/USD", "XRP"], ["ADAUSDT", "ADA/USD", "Cardano"], ["DOGEUSDT", "DOGE/USD", "Dogecoin"], ["AVAXUSDT", "AVAX/USD", "Avalanche"], ["LINKUSDT", "LINK/USD", "Chainlink"], ["DOTUSDT", "DOT/USD", "Polkadot"]], "crypto", "Kraken OHLC（云端缓存）", "public"),
   ...makeAssets([["AAPL", "AAPL", "Apple"], ["MSFT", "MSFT", "Microsoft"], ["NVDA", "NVDA", "NVIDIA"]], "stock", "授权数据源待配置", "requires_authorized_provider"),
   ...makeAssets([["SPY", "SPY", "SPDR S&P 500 ETF"], ["QQQ", "QQQ", "Invesco QQQ ETF"], ["GLD", "GLD", "SPDR Gold Shares"]], "etf", "授权数据源待配置", "requires_authorized_provider")
 ];
 
-const COINGECKO_IDS: Record<string, string> = { BTCUSDT: "bitcoin", ETHUSDT: "ethereum", SOLUSDT: "solana", BNBUSDT: "binancecoin", XRPUSDT: "ripple", ADAUSDT: "cardano", DOGEUSDT: "dogecoin", AVAXUSDT: "avalanche-2", LINKUSDT: "chainlink", DOTUSDT: "polkadot" };
 
 const demoSnapshot = (): Snapshot => ({
   version: 1,
@@ -159,59 +158,53 @@ async function latestSnapshot(env: Env): Promise<Snapshot> {
 }
 
 type Candle = { time: number; open: number; high: number; low: number; close: number; volume: number };
-type CandlePayload = { instrument: AssetDescriptor; interval: string; source: string; volumeAvailable: false; cachedAt: string; candles: Candle[] };
+type CandlePayload = { instrument: AssetDescriptor; interval: string; source: string; volumeAvailable: true; cachedAt: string; candles: Candle[] };
+type KrakenPayload = { error?: unknown; result?: Record<string, unknown> };
+
+const KRAKEN_PAIRS: Record<string, string> = { BTCUSDT: "XBTUSD", ETHUSDT: "ETHUSD", SOLUSDT: "SOLUSD", BNBUSDT: "BNBUSD", XRPUSDT: "XRPUSD", ADAUSDT: "ADAUSD", DOGEUSDT: "DOGEUSD", AVAXUSDT: "AVAXUSD", LINKUSDT: "LINKUSD", DOTUSDT: "DOTUSD" };
+const KRAKEN_INTERVALS: Record<string, string> = { "1h": "60", "4h": "240", "1d": "1440" };
 
 function candleCacheKey(symbol: string, interval: string): string {
   return `quantwatch:candles:v1:${symbol}:${interval}`;
 }
 
-function aggregateDaily(candles: Candle[]): Candle[] {
-  const grouped = new Map<number, Candle[]>();
-  for (const candle of candles) {
-    const day = Math.floor(candle.time / 86_400) * 86_400;
-    const values = grouped.get(day) ?? [];
-    values.push(candle);
-    grouped.set(day, values);
-  }
-  return [...grouped.entries()].sort(([a], [b]) => a - b).map(([time, values]) => ({
-    time,
-    open: values[0].open,
-    high: Math.max(...values.map(value => value.high)),
-    low: Math.min(...values.map(value => value.low)),
-    close: values.at(-1)?.close ?? values[0].close,
-    volume: 0
-  }));
-}
-
-function parseCoinGeckoCandles(payload: unknown, interval: string): Candle[] {
-  if (!Array.isArray(payload)) return [];
-  const candles = payload.map(row => {
-    if (!Array.isArray(row) || row.length < 5) return null;
-    const [timestamp, open, high, low, close] = row;
-    if (![timestamp, open, high, low, close].every(value => typeof value === "number" && Number.isFinite(value))) return null;
-    return { time: Math.floor(timestamp / 1000), open, high, low, close, volume: 0 };
+function parseKrakenCandles(payload: unknown): Candle[] {
+  if (!payload || typeof payload !== "object") return [];
+  const result = (payload as KrakenPayload).result;
+  if (!result || typeof result !== "object") return [];
+  const rows = Object.entries(result).find(([key, value]) => key !== "last" && Array.isArray(value))?.[1];
+  if (!Array.isArray(rows)) return [];
+  return rows.map(row => {
+    if (!Array.isArray(row) || row.length < 7) return null;
+    const [timestamp, open, high, low, close, _vwap, volume] = row;
+    const values = [Number(timestamp), Number(open), Number(high), Number(low), Number(close), Number(volume)];
+    if (!values.every(Number.isFinite)) return null;
+    return { time: values[0], open: values[1], high: values[2], low: values[3], close: values[4], volume: values[5] };
   }).filter((row): row is Candle => row != null).sort((a, b) => a.time - b.time);
-  return interval === "1d" ? aggregateDaily(candles) : candles;
 }
 
 async function cryptoCandles(request: Request, env: Env, symbol: string, interval: string, limit: number): Promise<Response> {
   const asset = ASSETS.find(candidate => candidate.id === symbol && candidate.availability === "public");
   if (!asset) return noStoreJson({ error: "asset_not_available", message: "该标的当前未配置公开数据源。" }, request, env, 400);
-  if (!SUPPORTED_INTERVALS.has(interval)) return noStoreJson({ error: "interval_not_supported", supported: [...SUPPORTED_INTERVALS], message: "当前公开数据源提供 4 小时和日线 K 线。" }, request, env, 400);
+  if (!SUPPORTED_INTERVALS.has(interval)) return noStoreJson({ error: "interval_not_supported", supported: [...SUPPORTED_INTERVALS], message: "当前公开数据源提供 1 小时、4 小时和日线 K 线。" }, request, env, 400);
   const key = candleCacheKey(symbol, interval);
   const cached = await env.SNAPSHOT_CACHE.get(key);
   if (cached) {
     try { return noStoreJson(JSON.parse(cached), request, env, 200); } catch { await env.SNAPSHOT_CACHE.delete(key); }
   }
-  const coinId = COINGECKO_IDS[symbol];
-  if (!coinId) return noStoreJson({ error: "asset_not_available", message: "该标的没有 CoinGecko 映射。" }, request, env, 400);
   try {
-    const upstream = await fetch(`https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=90`, { headers: { Accept: "application/json" }, cf: { cacheTtl: CANDLE_CACHE_TTL_SECONDS, cacheEverything: true } });
+    const count = Math.min(Math.max(limit, 60), 600);
+    const pair = KRAKEN_PAIRS[symbol];
+    const krakenInterval = KRAKEN_INTERVALS[interval];
+    if (!pair || !krakenInterval) return noStoreJson({ error: "asset_not_available", message: "该标的没有可用的 Kraken 数据映射。" }, request, env, 400);
+    const endpoint = new URL("https://api.kraken.com/0/public/OHLC");
+    endpoint.searchParams.set("pair", pair);
+    endpoint.searchParams.set("interval", krakenInterval);
+    const upstream = await fetch(endpoint.toString(), { headers: { Accept: "application/json" }, cf: { cacheTtl: CANDLE_CACHE_TTL_SECONDS, cacheEverything: true } });
     if (!upstream.ok) return noStoreJson({ error: "upstream_unavailable", message: `公开数据源返回 HTTP ${upstream.status}，请稍后重试。` }, request, env, 502);
-    const allCandles = parseCoinGeckoCandles(await upstream.json(), interval);
-    const candles = allCandles.slice(-Math.min(Math.max(limit, 60), 600));
+    const candles = parseKrakenCandles(await upstream.json()).slice(-count);
     if (candles.length < 60) return noStoreJson({ error: "insufficient_candles", message: "公开数据源返回的 K 线不足以计算研究指标。" }, request, env, 502);
-    const response: CandlePayload = { instrument: asset, interval, source: "CoinGecko OHLC（5 分钟云端缓存；不含成交量）", volumeAvailable: false, cachedAt: new Date().toISOString(), candles };
+    const response: CandlePayload = { instrument: asset, interval, source: "Kraken OHLC（5 分钟 Cloudflare 缓存）", volumeAvailable: true, cachedAt: new Date().toISOString(), candles };
     await env.SNAPSHOT_CACHE.put(key, JSON.stringify(response), { expirationTtl: CANDLE_CACHE_TTL_SECONDS });
     return noStoreJson(response, request, env, 200);
   } catch (error) {

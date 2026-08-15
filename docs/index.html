@@ -15,7 +15,7 @@
     </header>
 
     <section id="source-alert" class="notice" hidden></section>
-    <section class="notice"><strong>研究模式说明：</strong>加密资产 K线通过 Cloudflare 从 CoinGecko 读取并缓存 5 分钟，当前提供 4 小时与日线、且不含成交量；股票和 ETF 已进入统一资产目录，但需要经授权的数据供应商密钥后才会显示行情。页面输出仅供研究与教育用途，不构成投资建议。</section>
+    <section class="notice"><strong>研究模式说明：</strong>加密资产 K线通过 Cloudflare 从 Kraken 读取并缓存 5 分钟，当前提供 1 小时、4 小时与日线 OHLCV；股票和 ETF 已进入统一资产目录，但需要经授权的数据供应商密钥后才会显示行情。页面输出仅供研究与教育用途，不构成投资建议。</section>
 
     <section class="grid">
       <aside class="panel left">
@@ -23,7 +23,7 @@
         <div class="field"><label for="asset">标的目录</label><select id="asset"></select></div>
         <div class="watch-actions"><button id="watch-toggle" type="button" class="watch-button" aria-pressed="false">☆ 加入观察列表</button><span id="watch-count" class="muted-count">0 个标的</span></div>
         <div class="field"><label for="csv-file">导入真实 CSV（股票 / ETF / 基金 / 加密）</label><input id="csv-file" type="file" accept=".csv,text/csv" /><small>列格式：Date/Time、Open、High、Low、Close、Volume（可选）。数据仅在当前浏览器会话使用。</small></div>
-        <div class="control-row"><div class="field"><label for="interval">K线周期</label><select id="interval"><option value="4h" selected>4 小时</option><option value="1d">1 日</option></select></div><div class="field"><label>&nbsp;</label><button id="refresh" type="button">刷新数据</button></div></div>
+        <div class="control-row"><div class="field"><label for="interval">K线周期</label><select id="interval"><option value="1h">1 小时</option><option value="4h" selected>4 小时</option><option value="1d">1 日</option></select></div><div class="field"><label>&nbsp;</label><button id="refresh" type="button">刷新数据</button></div></div>
         <div class="divider"></div>
         <p class="section-title">图表图层</p>
         <div class="controls"><button class="pill-btn selected" data-indicator="sma">SMA 20/50</button><button class="pill-btn selected" data-indicator="ema">EMA 20</button><button class="pill-btn selected" data-indicator="bb">布林带</button><button class="pill-btn selected" data-indicator="volume">成交量</button></div>
@@ -35,7 +35,7 @@
         <p class="section-title">我的观察列表</p>
         <div id="watchlist" class="watchlist"><p class="empty-state">尚未添加标的。选择资产后可加入观察列表。</p></div>
         <div class="divider"></div>
-        <div class="legend"><div><b>可扩展目录：</b>股票、ETF、基金、加密资产、外汇、商品、期权。</div><div><b>当前真实数据：</b>Cloudflare 缓存的 CoinGecko 公开加密 K 线（4 小时 / 日线，不含成交量）与用户导入 CSV。</div><div><b>扫描范围：</b>公开加密资产与已导入数据；不伪造未授权市场行情。</div></div>
+        <div class="legend"><div><b>可扩展目录：</b>股票、ETF、基金、加密资产、外汇、商品、期权。</div><div><b>当前真实数据：</b>Cloudflare 缓存的 Kraken 公开加密 OHLCV 与用户导入 CSV。</div><div><b>扫描范围：</b>公开加密资产与已导入数据；不伪造未授权市场行情。</div></div>
       </aside>
 
       <section class="panel center">
