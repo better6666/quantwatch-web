@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "generatedAt": "2026-08-15T06:00:00Z",
+  "universe": "QuantWatch Local Engine · Core Watchlist",
+  "disclaimer": "研究快照由本地量化引擎生成，仅供研究与教育用途，不构成投资建议。",
+  "items": [
+    {
+      "ticker": "BTCUSDT",
+      "name": "Bitcoin",
+      "signal": "long",
+      "consensus": 0.62,
+      "price": 63089.01,
+      "changePct": 0.97,
+      "atr": 362.07,
+      "stopLoss": 62364.87,
+      "takeProfit": 64537.29,
+      "updatedAt": "2026-08-15T06:00:00Z"
+    },
+    {
+      "ticker": "SPY",
+      "name": "SPDR S&P 500 ETF",
+      "signal": "neutral",
+      "consensus": 0,
+      "price": 628.12,
+      "changePct": -0.14,
+      "atr": 5.31,
+      "updatedAt": "2026-08-15T06:00:00Z"
+    }
+  ]
+}
