@@ -49,7 +49,7 @@ export interface Env {
 
 const CACHE_KEY = "quantwatch:latest-snapshot:v1";
 const ONE_DAY_SECONDS = 86_400;
-const SUPPORTED_INTERVALS = new Set(["1h", "4h", "1d"]);
+const SUPPORTED_INTERVALS = new Set(["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M"]);
 const CANDLE_CACHE_TTL_SECONDS = 300;
 const MAX_SYNC_BODY_BYTES = 256_000;
 const MAX_SYNC_ITEMS = 500;
@@ -162,7 +162,8 @@ type CandlePayload = { instrument: AssetDescriptor; interval: string; source: st
 type KrakenPayload = { error?: unknown; result?: Record<string, unknown> };
 
 const KRAKEN_PAIRS: Record<string, string> = { BTCUSDT: "XBTUSD", ETHUSDT: "ETHUSD", SOLUSDT: "SOLUSD", BNBUSDT: "BNBUSD", XRPUSDT: "XRPUSD", ADAUSDT: "ADAUSD", DOGEUSDT: "DOGEUSD", AVAXUSDT: "AVAXUSD", LINKUSDT: "LINKUSD", DOTUSDT: "DOTUSD" };
-const KRAKEN_INTERVALS: Record<string, string> = { "1h": "60", "4h": "240", "1d": "1440" };
+const KRAKEN_INTERVALS: Record<string, string> = { "1m": "1", "5m": "5", "15m": "15", "30m": "30", "1h": "60", "4h": "240", "1d": "1440", "1w": "10080", "1M": "1440" };
+const INTERVAL_LABELS: Record<string, string> = { "1m": "1 分钟", "5m": "5 分钟", "15m": "15 分钟", "30m": "30 分钟", "1h": "1 小时", "4h": "4 小时", "1d": "日线", "1w": "周线", "1M": "月线" };
 
 function candleCacheKey(symbol: string, interval: string): string {
   return `quantwatch:candles:v1:${symbol}:${interval}`;
@@ -183,17 +184,29 @@ function parseKrakenCandles(payload: unknown): Candle[] {
   }).filter((row): row is Candle => row != null).sort((a, b) => a.time - b.time);
 }
 
+function aggregateMonthly(candles: Candle[]): Candle[] {
+  const buckets = new Map<number, Candle[]>();
+  for (const candle of candles) {
+    const date = new Date(candle.time * 1000);
+    const time = Math.floor(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1) / 1000);
+    const values = buckets.get(time) ?? [];
+    values.push(candle);
+    buckets.set(time, values);
+  }
+  return [...buckets.entries()].sort(([left], [right]) => left - right).map(([time, values]) => ({ time, open: values[0].open, high: Math.max(...values.map(value => value.high)), low: Math.min(...values.map(value => value.low)), close: values.at(-1)?.close ?? values[0].close, volume: values.reduce((sum, value) => sum + value.volume, 0) }));
+}
+
 async function cryptoCandles(request: Request, env: Env, symbol: string, interval: string, limit: number): Promise<Response> {
   const asset = ASSETS.find(candidate => candidate.id === symbol && candidate.availability === "public");
   if (!asset) return noStoreJson({ error: "asset_not_available", message: "该标的当前未配置公开数据源。" }, request, env, 400);
-  if (!SUPPORTED_INTERVALS.has(interval)) return noStoreJson({ error: "interval_not_supported", supported: [...SUPPORTED_INTERVALS], message: "当前公开数据源提供 1 小时、4 小时和日线 K 线。" }, request, env, 400);
+  if (!SUPPORTED_INTERVALS.has(interval)) return noStoreJson({ error: "interval_not_supported", supported: [...SUPPORTED_INTERVALS], message: "当前公开数据源提供分钟、小时、日、周与月线；秒K需接入逐笔成交数据源。" }, request, env, 400);
   const key = candleCacheKey(symbol, interval);
   const cached = await env.SNAPSHOT_CACHE.get(key);
   if (cached) {
     try { return noStoreJson(JSON.parse(cached), request, env, 200); } catch { await env.SNAPSHOT_CACHE.delete(key); }
   }
   try {
-    const count = Math.min(Math.max(limit, 60), 600);
+    const count = Math.min(Math.max(limit, 60), 720);
     const pair = KRAKEN_PAIRS[symbol];
     const krakenInterval = KRAKEN_INTERVALS[interval];
     if (!pair || !krakenInterval) return noStoreJson({ error: "asset_not_available", message: "该标的没有可用的 Kraken 数据映射。" }, request, env, 400);
@@ -202,9 +215,11 @@ async function cryptoCandles(request: Request, env: Env, symbol: string, interva
     endpoint.searchParams.set("interval", krakenInterval);
     const upstream = await fetch(endpoint.toString(), { headers: { Accept: "application/json" }, cf: { cacheTtl: CANDLE_CACHE_TTL_SECONDS, cacheEverything: true } });
     if (!upstream.ok) return noStoreJson({ error: "upstream_unavailable", message: `公开数据源返回 HTTP ${upstream.status}，请稍后重试。` }, request, env, 502);
-    const candles = parseKrakenCandles(await upstream.json()).slice(-count);
-    if (candles.length < 60) return noStoreJson({ error: "insufficient_candles", message: "公开数据源返回的 K 线不足以计算研究指标。" }, request, env, 502);
-    const response: CandlePayload = { instrument: asset, interval, source: "Kraken OHLC（5 分钟 Cloudflare 缓存）", volumeAvailable: true, cachedAt: new Date().toISOString(), candles };
+    const parsed = parseKrakenCandles(await upstream.json());
+    const candles = (interval === "1M" ? aggregateMonthly(parsed) : parsed).slice(-count);
+    const minimumCandles = interval === "1M" ? 12 : interval === "1w" ? 20 : 60;
+    if (candles.length < minimumCandles) return noStoreJson({ error: "insufficient_candles", message: `公开数据源返回 ${candles.length} 根 K 线，少于 ${INTERVAL_LABELS[interval]} 所需的最低样本量 ${minimumCandles}。` }, request, env, 502);
+    const response: CandlePayload = { instrument: asset, interval, source: `Kraken OHLC · ${INTERVAL_LABELS[interval]}（5 分钟 Cloudflare 缓存）`, volumeAvailable: true, cachedAt: new Date().toISOString(), candles };
     await env.SNAPSHOT_CACHE.put(key, JSON.stringify(response), { expirationTtl: CANDLE_CACHE_TTL_SECONDS });
     return noStoreJson(response, request, env, 200);
   } catch (error) {
@@ -244,7 +259,7 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(request, env) });
     try {
       if (request.method === "GET") {
-        if (url.pathname === "/" || url.pathname === "/api") return json({ name: env.APP_NAME, status: "ok", endpoints: ["/api/health", "/api/snapshot", "POST /api/snapshot", "/api/quotes", "/api/assets", "/api/candles?symbol=BTCUSDT&interval=4h&limit=350"], candleIntervals: [...SUPPORTED_INTERVALS] }, request, env);
+        if (url.pathname === "/" || url.pathname === "/api") return json({ name: env.APP_NAME, status: "ok", endpoints: ["/api/health", "/api/snapshot", "POST /api/snapshot", "/api/quotes", "/api/assets", "/api/candles?symbol=BTCUSDT&interval=4h&limit=350"], candleIntervals: [...SUPPORTED_INTERVALS], candleIntervalLabels: INTERVAL_LABELS, secondCandles: { available: false, message: "秒K需要逐笔成交数据或持久化实时数据流，当前公开 REST 数据源不提供可靠历史秒K。" } }, request, env);
         if (url.pathname === "/api/snapshot") return json(await latestSnapshot(env), request, env);
         if (url.pathname === "/api/quotes") { const snapshot = await latestSnapshot(env); return json({ generatedAt: snapshot.generatedAt, source: snapshot.source, quotes: snapshot.items.map(({ ticker, name, price, changePct, updatedAt }) => ({ ticker, name, price, changePct, updatedAt })) }, request, env); }
         if (url.pathname === "/api/assets") return json({ generatedAt: new Date().toISOString(), assets: ASSETS }, request, env);
