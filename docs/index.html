@@ -15,7 +15,7 @@
     </header>
 
     <section id="source-alert" class="notice" hidden></section>
-    <section class="notice"><strong>公开数据说明：</strong>加密资产目录自动同步 Kraken 在线 USD 交易对，覆盖分钟至月线 OHLCV；常用美股和 ETF 可直接使用免费日/周/月线研究数据。秒K、股票分钟线和专业级复权/公司行为数据仍需要相应数据源；页面输出仅供研究与教育用途，不构成投资建议。</section>
+    <section class="notice"><strong>多数据源说明：</strong>加密资产按 Kraken OHLC → Coinbase Exchange 公开蜡烛数据回退；股票与 ETF 按 Yahoo Finance → Nasdaq Historical 日线回退；共同基金使用 Yahoo Finance 公共日/周/月线。每次加载都会在“数据与实验口径”显示实际数据源、回退链路和失败记录。秒K、股票分钟线和专业复权/公司行为数据仍需要相应数据源；页面输出仅供研究与教育用途，不构成投资建议。</section>
 
     <section class="grid">
       <aside class="panel left">
@@ -39,7 +39,7 @@
         <p class="section-title">我的观察列表</p>
         <div id="watchlist" class="watchlist"><p class="empty-state">尚未添加标的。选择资产后可加入观察列表。</p></div>
         <div class="divider"></div>
-        <div class="legend"><div><b>公开标的：</b>Kraken 在线 USD 加密交易对，以及常用美股和 ETF。</div><div><b>当前真实数据：</b>Kraken 公开分钟至月线 OHLCV、Yahoo Finance 免费日/周/月线与用户导入 CSV。</div><div><b>策略库：</b>趋势、突破、均值回归、动量、序列反转、关键位、波动率与成交量确认。</div><div><b>扫描范围：</b>最多扫描 30 个当前公开数据标的；不伪造未授权市场行情。</div></div>
+        <div class="legend"><div><b>公开标的：</b>Kraken 在线 USD 加密交易对，以及常用美股、ETF 和共同基金。</div><div><b>数据路由：</b>Kraken → Coinbase；Yahoo Finance → Nasdaq（股票/ETF 日线）；基金优先 Yahoo Finance。</div><div><b>审计透明度：</b>页面展示实际使用源、已失败源、样本范围、缺口和已收盘K线政策。</div><div><b>扫描范围：</b>最多扫描 30 个当前公开数据标的；不伪造未授权市场行情。</div></div>
       </aside>
 
       <section class="panel center">
@@ -70,7 +70,7 @@
     <section class="panel roadmap"><h2>完全体路线</h2><p>系统按统一资产、数据、指标、策略和回测协议逐步扩展。查看 <a href="./ROADMAP.md">架构路线图</a>，了解多市场数据授权、批量扫描和专业研究层的实施边界。</p></section>
   </main>
   <script src="./vendor/lightweight-charts-5.2.1.js"></script>
-  <script src="./app.js?v=public-universe-v2"></script>
-  <script src="./strategy-lab.js?v=public-universe-v2"></script>
+  <script src="./app.js?v=multi-source-v1"></script>
+  <script src="./strategy-lab.js?v=multi-source-v1"></script>
 </body>
 </html>
