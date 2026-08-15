@@ -65,7 +65,7 @@ const numeric = value => Number.isFinite(Number(value)) ? Number(value) : 0;
 
 function populateAssets(query = $('asset-search')?.value || '') {
   const normalized = query.trim().toLowerCase(); const visible = ASSETS.filter(asset => !normalized || `${asset.symbol} ${asset.name} ${asset.type}`.toLowerCase().includes(normalized)); const groups = visible.reduce((acc, asset) => { (acc[asset.type] ||= []).push(asset); return acc; }, {});
-  $('asset').innerHTML = Object.entries(groups).map(([type, assets]) => `<optgroup label="${type} · ${assets.length} 个">${assets.map(asset => `<option value="${asset.id}">${asset.symbol} · ${asset.name}${asset.mode !== 'public-realtime' ? '（CSV 导入）' : ''}</option>`).join('')}</optgroup>`).join('') || '<option disabled>没有匹配的公开标的</option>';
+  $('asset').innerHTML = Object.entries(groups).map(([type, assets]) => `<optgroup label="${type} · ${assets.length} 个">${assets.map(asset => `<option value="${asset.id}">${asset.symbol} · ${asset.name}${asset.mode === 'provider-required' ? '（CSV 导入）' : asset.mode === 'public-daily' ? '（免费日线）' : ''}</option>`).join('')}</optgroup>`).join('') || '<option disabled>没有匹配的公开标的</option>';
   if (visible.some(asset => asset.id === state.assetId)) $('asset').value = state.assetId; else if (visible[0]) { state.assetId = visible[0].id; $('asset').value = state.assetId; }
   $('interval').innerHTML = INTERVALS.map(([value, label]) => `<option value="${value}" ${value === state.interval ? 'selected' : ''}>${label}</option>`).join('') + '<option disabled>────────</option><option disabled value="1s">秒K：需逐笔成交数据源</option>';
   $('strategy').innerHTML = Object.entries(STRATEGIES).map(([id, strategy]) => `<option value="${id}">${strategy.name} · ${strategy.family}</option>`).join('');
