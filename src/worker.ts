@@ -48,13 +48,12 @@ export interface Env {
 
 const CACHE_KEY = "quantwatch:latest-snapshot:v1";
 const ONE_DAY_SECONDS = 86_400;
-const CANDLE_CACHE_SECONDS = 60;
 const SUPPORTED_INTERVALS = new Set(["1h", "4h", "1d"]);
 const makeAssets = (entries: ReadonlyArray<readonly [string, string, string]>, assetClass: AssetDescriptor["assetClass"], provider: string, availability: AssetDescriptor["availability"]): AssetDescriptor[] =>
   entries.map(([id, symbol, name]) => ({ id, symbol, name, assetClass, provider, availability }));
 
 const ASSETS: AssetDescriptor[] = [
-  ...makeAssets([["BTCUSDT", "BTC/USDT", "Bitcoin"], ["ETHUSDT", "ETH/USDT", "Ethereum"], ["SOLUSDT", "SOL/USDT", "Solana"], ["BNBUSDT", "BNB/USDT", "BNB"], ["XRPUSDT", "XRP/USDT", "XRP"], ["ADAUSDT", "ADA/USDT", "Cardano"], ["DOGEUSDT", "DOGE/USDT", "Dogecoin"], ["AVAXUSDT", "AVAX/USDT", "Avalanche"], ["LINKUSDT", "LINK/USDT", "Chainlink"], ["DOTUSDT", "DOT/USDT", "Polkadot"]], "crypto", "Binance Spot", "public"),
+  ...makeAssets([["BTCUSDT", "BTC/USDT", "Bitcoin"], ["ETHUSDT", "ETH/USDT", "Ethereum"], ["SOLUSDT", "SOL/USDT", "Solana"], ["BNBUSDT", "BNB/USDT", "BNB"], ["XRPUSDT", "XRP/USDT", "XRP"], ["ADAUSDT", "ADA/USDT", "Cardano"], ["DOGEUSDT", "DOGE/USDT", "Dogecoin"], ["AVAXUSDT", "AVAX/USDT", "Avalanche"], ["LINKUSDT", "LINK/USDT", "Chainlink"], ["DOTUSDT", "DOT/USDT", "Polkadot"]], "crypto", "CoinGecko OHLC", "public"),
   ...makeAssets([["AAPL", "AAPL", "Apple"], ["MSFT", "MSFT", "Microsoft"], ["NVDA", "NVDA", "NVIDIA"]], "stock", "授权数据源待配置", "requires_authorized_provider"),
   ...makeAssets([["SPY", "SPY", "SPDR S&P 500 ETF"], ["QQQ", "QQQ", "Invesco QQQ ETF"], ["GLD", "GLD", "SPDR Gold Shares"]], "etf", "授权数据源待配置", "requires_authorized_provider")
 ];
@@ -118,29 +117,11 @@ async function latestSnapshot(env: Env): Promise<Snapshot> {
   const seeded = demoSnapshot(); await saveSnapshot(seeded, env, "seed"); return seeded;
 }
 
-function normalizeBinanceKlines(raw: unknown): Candle[] {
-  if (!Array.isArray(raw)) throw new Error("upstream_payload_invalid");
-  return raw.map((row) => {
-    if (!Array.isArray(row) || row.length < 6) throw new Error("upstream_candle_invalid");
-    return { time: Math.floor(Number(row[0]) / 1000), open: Number(row[1]), high: Number(row[2]), low: Number(row[3]), close: Number(row[4]), volume: Number(row[5]) };
-  });
-}
-
-async function cryptoCandles(request: Request, env: Env, symbol: string, interval: string, limit: number): Promise<Response> {
+async function cryptoCandles(request: Request, env: Env, symbol: string, interval: string, _limit: number): Promise<Response> {
   const asset = ASSETS.find((candidate) => candidate.id === symbol && candidate.availability === "public");
   if (!asset) return json({ error: "asset_not_available", message: "该标的当前未配置公开数据源。" }, request, env, { status: 400 });
   if (!SUPPORTED_INTERVALS.has(interval)) return json({ error: "interval_not_supported", supported: [...SUPPORTED_INTERVALS] }, request, env, { status: 400 });
-  const boundedLimit = Math.max(60, Math.min(limit || 350, 500));
-  const cacheUrl = new URL(request.url); cacheUrl.searchParams.set("limit", String(boundedLimit));
-  const cache = await caches.open("quantwatch-market-cache");
-  const cached = await cache.match(cacheUrl);
-  if (cached) return cached;
-  const upstream = await fetch(`https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${boundedLimit}`, { cf: { cacheTtl: CANDLE_CACHE_SECONDS, cacheEverything: true } });
-  if (!upstream.ok) return json({ error: "upstream_unavailable", status: upstream.status }, request, env, { status: 502, headers: { "Cache-Control": "no-store" } });
-  const candles = normalizeBinanceKlines(await upstream.json());
-  const response = json({ instrument: asset, interval, dataMode: "public-realtime", source: "Binance Spot", generatedAt: new Date().toISOString(), candles }, request, env, { headers: { "Cache-Control": `public, max-age=${CANDLE_CACHE_SECONDS}, s-maxage=${CANDLE_CACHE_SECONDS}` } });
-  await cache.put(cacheUrl, response.clone());
-  return response;
+  return json({ error: "keyless_cloud_proxy_unavailable", message: "公开交易所上游拒绝 Cloudflare Worker 出口。请在浏览器端直接读取公开加密K线，或导入已获授权的真实CSV数据。", instrument: asset }, request, env, { status: 503, headers: { "Cache-Control": "no-store" } });
 }
 
 async function scheduledRefresh(env: Env): Promise<void> {

@@ -32,7 +32,7 @@ const STRATEGIES = {
   volume: { name: '成交量确认', family: '确认', description: '成交量相对 20 期均量的放大情况用作趋势或突破的确认条件。' }
 };
 
-const state = { assetId: 'BTCUSDT', interval: '4h', strategy: 'trend', candles: [], chart: null, series: {}, activeIndicators: new Set(['sma', 'ema', 'bb', 'volume']), loading: false };
+const state = { assetId: 'BTCUSDT', interval: '4h', strategy: 'trend', candles: [], chart: null, series: {}, activeIndicators: new Set(['sma', 'ema', 'bb', 'volume']), loading: false, localSeries: new Map(), dataMode: 'public-realtime', dataSource: 'Binance Spot' };
 const $ = (id) => document.getElementById(id);
 const fmt = (value, digits = 2) => Number.isFinite(Number(value)) ? Number(value).toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits }) : '—';
 const pct = (value) => `${Number(value) >= 0 ? '+' : ''}${fmt(value, 2)}%`;
@@ -125,7 +125,7 @@ function renderResearch() {
   renderChart(ind);
   $('asset-meta').textContent = `${asset.symbol} · ${asset.name} · ${asset.type} · ${asset.source}`;
   $('strategy-name').textContent = `${STRATEGIES[state.strategy].name} · ${STRATEGIES[state.strategy].family}`;
-  $('research-source').textContent = '公开交易所实时 K线'; $('research-time').textContent = new Date(last.time * 1000).toLocaleString('zh-CN', { hour12: false });
+  $('research-source').textContent = state.dataSource; $('research-mode').textContent = state.dataMode === 'user-csv' ? '数据模式：用户导入真实CSV · 浏览器端指标与策略计算' : '数据模式：公开交易所K线 · 浏览器端指标与策略计算'; $('research-time').textContent = new Date(last.time * 1000).toLocaleString('zh-CN', { hour12: false });
   $('price').textContent = fmt(last.close, last.close < 10 ? 4 : 2); $('signal').className = `badge ${signal.side}`; $('signal').textContent = signal.side === 'long' ? '偏多研究' : signal.side === 'short' ? '偏空研究' : '中性观察';
   $('signal-score').textContent = `${signal.score >= 0 ? '+' : ''}${fmt(signal.score * 100, 0)}%`; $('strategy-evidence').textContent = signal.evidence; $('strategy-description').textContent = STRATEGIES[state.strategy].description;
   const rows = [ ['SMA20 / SMA50', `${fmt(ind.sma20.at(-1))} / ${fmt(ind.sma50.at(-1))}`], ['EMA20', fmt(ind.ema20.at(-1))], ['RSI(14)', fmt(ind.rsi.at(-1), 1)], ['MACD Hist', fmt(ind.histogram.at(-1), 3)], ['布林带', `${fmt(ind.lower.at(-1))} — ${fmt(ind.upper.at(-1))}`], ['ATR(14)', fmt(ind.atr.at(-1))], ['Stoch %K', fmt(ind.stoch.at(-1), 1)], ['均量比', `${fmt(last.volume / (ind.volumeSma.at(-1) || last.volume), 2)}x`] ];
@@ -133,20 +133,31 @@ function renderResearch() {
   $('backtest').innerHTML = `<div><span>区间收益</span><strong class="${backtest.total >= 0 ? 'positive' : 'negative'}">${pct(backtest.total)}</strong></div><div><span>最大回撤</span><strong class="negative">${fmt(backtest.maxDD, 2)}%</strong></div><div><span>已平仓交易</span><strong>${backtest.trades}</strong></div><div><span>胜率</span><strong>${fmt(backtest.winRate, 1)}%</strong></div>`;
 }
 async function loadCandles() {
-  const asset = ASSETS.find(a => a.id === state.assetId); if (asset.mode !== 'public-realtime') { $('source-alert').hidden = false; $('source-alert').textContent = `${asset.symbol} 已进入统一资产目录，但当前未配置经授权的股票/ETF 数据供应商密钥；请先切换至加密资产，或在下一阶段配置服务端数据密钥。`; return; }
+  const asset = ASSETS.find(a => a.id === state.assetId); const imported = state.localSeries.get(asset.id);
+  if (imported) { state.candles = imported; state.dataMode = 'user-csv'; state.dataSource = '用户导入 CSV'; $('source-alert').hidden = true; renderResearch(); $('load-status').textContent = `已载入用户导入的 ${state.candles.length} 根真实K线`; return; }
+  if (asset.mode !== 'public-realtime') { $('source-alert').hidden = false; $('source-alert').textContent = `${asset.symbol} 已进入统一资产目录。无密钥模式下，请使用下方“导入真实 CSV”导入已获授权或个人下载的 OHLCV 数据；导入后可立即使用全部指标、策略和轻量回测。`; $('load-status').textContent = '等待用户导入真实CSV数据'; return; }
   state.loading = true; $('load-status').textContent = '正在读取公开交易所K线…'; $('source-alert').hidden = true;
   try {
     const url = `${BINANCE_KLINES}?symbol=${asset.id}&interval=${state.interval}&limit=350`;
     const response = await fetch(url); if (!response.ok) throw new Error(`上游接口 HTTP ${response.status}`); const raw = await response.json();
     state.candles = raw.map(row => ({ time: Math.floor(Number(row[0]) / 1000), open: Number(row[1]), high: Number(row[2]), low: Number(row[3]), close: Number(row[4]), volume: Number(row[5]) }));
-    renderResearch(); $('load-status').textContent = `已载入 ${state.candles.length} 根 ${state.interval} K线`;
+    state.dataMode = 'public-realtime'; state.dataSource = '公开交易所实时 K线'; renderResearch(); $('load-status').textContent = `已载入 ${state.candles.length} 根 ${state.interval} K线`;
   } catch (error) { $('load-status').textContent = `数据读取失败：${error.message}`; $('source-alert').hidden = false; $('source-alert').textContent = '公开数据源暂不可用，请稍后刷新。'; }
   finally { state.loading = false; }
+}
+function parseCsv(text) {
+  const lines = text.trim().split(/\r?\n/).filter(Boolean); if (lines.length < 3) throw new Error('CSV 至少需要表头和两行K线');
+  const headers = lines[0].split(',').map(value => value.trim().toLowerCase()); const index = (names) => names.map(name => headers.indexOf(name)).find(position => position >= 0);
+  const dateIndex = index(['date','time','datetime','timestamp']), openIndex = index(['open']), highIndex = index(['high']), lowIndex = index(['low']), closeIndex = index(['close','adj close','adj_close']), volumeIndex = index(['volume']);
+  if ([dateIndex, openIndex, highIndex, lowIndex, closeIndex].some(position => position == null)) throw new Error('CSV 需要 Date/Time、Open、High、Low、Close 列（Volume 可选）');
+  const candles = lines.slice(1).map(line => line.split(',').map(value => value.trim())).map(row => { const rawTime = row[dateIndex]; const time = /^\d+$/.test(rawTime) ? Math.floor(Number(rawTime) / (rawTime.length > 10 ? 1000 : 1)) : Math.floor(new Date(rawTime).getTime() / 1000); return { time, open: Number(row[openIndex]), high: Number(row[highIndex]), low: Number(row[lowIndex]), close: Number(row[closeIndex]), volume: volumeIndex == null ? 0 : Number(row[volumeIndex]) || 0 }; }).filter(candle => [candle.time, candle.open, candle.high, candle.low, candle.close].every(Number.isFinite)).sort((a, b) => a.time - b.time);
+  if (candles.length < 60) throw new Error('至少导入 60 根有效K线才能计算完整指标'); return candles;
 }
 function wire() {
   $('asset').addEventListener('change', e => { state.assetId = e.target.value; loadCandles(); }); $('interval').addEventListener('change', e => { state.interval = e.target.value; loadCandles(); }); $('strategy').addEventListener('change', e => { state.strategy = e.target.value; if (state.candles.length) renderResearch(); });
   document.querySelectorAll('[data-indicator]').forEach(button => button.addEventListener('click', () => { const id = button.dataset.indicator; state.activeIndicators.has(id) ? state.activeIndicators.delete(id) : state.activeIndicators.add(id); button.classList.toggle('selected', state.activeIndicators.has(id)); if (state.candles.length) renderResearch(); }));
   $('refresh').addEventListener('click', loadCandles);
+  $('csv-file').addEventListener('change', async (event) => { const file = event.target.files?.[0]; if (!file) return; try { const candles = parseCsv(await file.text()); state.localSeries.set(state.assetId, candles); state.candles = candles; state.dataMode = 'user-csv'; state.dataSource = `用户导入 CSV · ${file.name}`; $('source-alert').hidden = false; $('source-alert').textContent = `已导入 ${candles.length} 根真实K线。数据仅在当前浏览器会话中使用，不会上传至服务器。`; renderResearch(); $('load-status').textContent = `已载入用户导入的 ${candles.length} 根真实K线`; } catch (error) { $('source-alert').hidden = false; $('source-alert').textContent = `CSV 导入失败：${error.message}`; } finally { event.target.value = ''; } });
 }
 async function boot() { populateAssets(); wire(); try { const health = await fetch(`${API_BASE}/api/health`).then(r => r.json()); $('cloud-status').textContent = health.status === 'ok' ? '云端研究服务正常' : '云端服务异常'; } catch { $('cloud-status').textContent = '云端研究服务连接受限'; } loadCandles(); }
 boot();
