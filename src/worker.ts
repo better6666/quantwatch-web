@@ -108,7 +108,9 @@ async function latestSnapshot(env: Env): Promise<Snapshot> {
     return { ...databaseSnapshot, source: "cloud-archive" };
   }
 
-  return demoSnapshot();
+  const seeded = demoSnapshot();
+  await saveSnapshot(seeded, env, "seed");
+  return seeded;
 }
 
 async function scheduledRefresh(env: Env): Promise<void> {
