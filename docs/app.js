@@ -1,5 +1,5 @@
 /* QuantWatch Research Terminal — multi-timeframe, strategy and indicator workbench. */
-const API_BASE = window.location.hostname === 'better6666.github.io' ? 'https://quantwatch-api.2333333434.workers.dev' : window.location.origin;
+const API_BASE = 'https://better789.dpdns.org';
 const WATCHLIST_KEY = 'quantwatch:watchlist:v2';
 const PUBLIC_SCAN_LIMIT = 240;
 
