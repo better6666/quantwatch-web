@@ -1,0 +1,24 @@
+name = "quantwatch-api"
+main = "src/worker.ts"
+compatibility_date = "2026-08-15"
+workers_dev = true
+
+[vars]
+ALLOWED_ORIGIN = "https://better6666.github.io"
+APP_NAME = "QuantWatch Cloud Lite"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "quantwatch-snapshots"
+database_id = "9b9f8e6f-0f85-4d5b-8fd2-7187d84d3a5b"
+
+[[kv_namespaces]]
+binding = "SNAPSHOT_CACHE"
+id = "198f2804bb2841b993a854d7910f984b"
+
+[[r2_buckets]]
+binding = "ARCHIVE"
+bucket_name = "quantwatch-archive"
+
+[triggers]
+crons = ["0 8 * * 1-5"]

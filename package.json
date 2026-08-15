@@ -1,0 +1,22 @@
+{
+  "name": "quantwatch-cloud-lite",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare free-tier signal snapshot API and GitHub Pages frontend for QuantWatch.",
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "deploy": "wrangler deploy",
+    "d1:migrate": "wrangler d1 execute quantwatch-snapshots --remote --file=./schema.sql",
+    "seed": "tsx scripts/seed-snapshot.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260815.1",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0",
+    "wrangler": "^4.28.0"
+  }
+}
