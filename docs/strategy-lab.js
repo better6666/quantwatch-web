@@ -41,6 +41,7 @@
       filters: { trend: get('filter-trend').checked, momentum: get('filter-momentum').checked, volume: get('filter-volume').checked, volatility: get('filter-volatility').checked },
       atrStop: Math.min(8, Math.max(0.5, n(get('risk-atr').value))),
       reward: Math.min(8, Math.max(0.5, n(get('risk-reward').value))),
+      trail: Math.min(8, Math.max(0.5, n(get('risk-trail').value))),
       fee: Math.min(2, Math.max(0, n(get('risk-fee').value))) / 100,
       allocation: Math.min(10, Math.max(0.1, n(get('risk-allocation').value))) / 100
     };
@@ -49,13 +50,14 @@
   function setupControls() {
     const settings = savedSettings();
     get('lab-strategy').innerHTML = Object.entries(recipes).map(([id, recipe]) => `<option value="${id}">${recipe.name} · ${recipe.family}</option>`).join('');
-    const fields = ['lab-strategy', 'entry-mode', 'filter-trend', 'filter-momentum', 'filter-volume', 'filter-volatility', 'risk-atr', 'risk-reward', 'risk-fee', 'risk-allocation'];
+    const fields = ['lab-strategy', 'entry-mode', 'filter-trend', 'filter-momentum', 'filter-volume', 'filter-volatility', 'risk-atr', 'risk-reward', 'risk-trail', 'risk-fee', 'risk-allocation'];
     fields.forEach(id => get(id).addEventListener('change', persist));
     if (settings.recipe) get('lab-strategy').value = settings.recipe;
     if (settings.mode) get('entry-mode').value = settings.mode;
     if (settings.filters) { get('filter-trend').checked = Boolean(settings.filters.trend); get('filter-momentum').checked = Boolean(settings.filters.momentum); get('filter-volume').checked = Boolean(settings.filters.volume); get('filter-volatility').checked = Boolean(settings.filters.volatility); }
     if (settings.atrStop) get('risk-atr').value = settings.atrStop;
     if (settings.reward) get('risk-reward').value = settings.reward;
+    if (settings.trail) get('risk-trail').value = settings.trail;
     if (settings.fee != null) get('risk-fee').value = (settings.fee * 100).toFixed(2);
     if (settings.allocation) get('risk-allocation').value = (settings.allocation * 100).toFixed(1);
   }
@@ -113,23 +115,38 @@
   function backtest(candles, config) {
     const indicators = calculate(candles); const warmup = 60; let equity = 1; let peak = 1; let maxDrawdown = 0; let position = null; const trades = []; const equityCurve = [];
     for (let i = warmup; i < candles.length - 1; i++) {
-      const candle = candles[i]; const next = candles[i + 1]; const signal = compositeSignal(i, candles, indicators, config);
+      const next = candles[i + 1]; const signal = compositeSignal(i, candles, indicators, config);
       if (!position && signal.direction) {
         const distance = indicators.atr[i] * config.atrStop;
         if (!Number.isFinite(distance) || distance <= 0) continue;
-        const entry = next.open; const stop = signal.direction > 0 ? entry - distance : entry + distance; const target = signal.direction > 0 ? entry + distance * config.reward : entry - distance * config.reward;
-        position = { side: signal.direction, entry, stop, target, openedAt: i + 1, evidence: signal.evidence, score: signal.score };
+        const entry = next.open; const initialStop = signal.direction > 0 ? entry - distance : entry + distance; const target = signal.direction > 0 ? entry + distance * config.reward : entry - distance * config.reward;
+        position = { side: signal.direction, entry, initialStop, stop: initialStop, target, openedAt: i + 1, evidence: signal.evidence, score: signal.score, riskPerUnit: distance, trailMoves: 0, bestPrice: entry };
       }
       if (position) {
         let exit = null; let reason = null;
-        if (position.side > 0) { if (next.low <= position.stop) { exit = position.stop; reason = '止损'; } else if (next.high >= position.target) { exit = position.target; reason = '止盈'; } }
-        else { if (next.high >= position.stop) { exit = position.stop; reason = '止损'; } else if (next.low <= position.target) { exit = position.target; reason = '止盈'; } }
+        /* Stops and targets are tested before a new trailing stop is calculated; a trail moved from this candle starts on the next candle. */
+        if (position.side > 0) {
+          if (next.low <= position.stop) { exit = position.stop; reason = position.stop > position.initialStop ? '移动止损' : '初始止损'; }
+          else if (next.high >= position.target) { exit = position.target; reason = '目标止盈'; }
+        } else {
+          if (next.high >= position.stop) { exit = position.stop; reason = position.stop < position.initialStop ? '移动止损' : '初始止损'; }
+          else if (next.low <= position.target) { exit = position.target; reason = '目标止盈'; }
+        }
+        if (!exit) {
+          const atrValue = indicators.atr[i] || position.riskPerUnit / config.atrStop; const favorable = position.side > 0 ? next.high - position.entry : position.entry - next.low;
+          if (favorable >= position.riskPerUnit) {
+            const trailCandidate = position.side > 0 ? next.high - atrValue * config.trail : next.low + atrValue * config.trail;
+            const improved = position.side > 0 ? Math.max(position.stop, trailCandidate, position.entry) : Math.min(position.stop, trailCandidate, position.entry);
+            if (improved !== position.stop) { position.stop = improved; position.trailMoves += 1; }
+            position.bestPrice = position.side > 0 ? Math.max(position.bestPrice, next.high) : Math.min(position.bestPrice, next.low);
+          }
+        }
         const reversal = compositeSignal(i, candles, indicators, config).direction === -position.side;
         if (!exit && reversal) { exit = next.close; reason = '反向信号'; }
         if (!exit && i === candles.length - 2) { exit = next.close; reason = '区间结束'; }
         if (exit != null) {
-          const gross = position.side * (exit / position.entry - 1); const net = gross - config.fee * 2; const riskCapital = Math.min(config.allocation, 0.05); const strategyReturn = net * Math.min(1, riskCapital / Math.max(Math.abs((position.entry - position.stop) / position.entry), 0.0001));
-          const before = equity; equity *= Math.max(0.01, 1 + strategyReturn); trades.push({ side: position.side, entry: position.entry, exit, gross, net, strategyReturn, reason, openedAt: position.openedAt, closedAt: i + 1, holding: i + 1 - position.openedAt, evidence: position.evidence, equityBefore: before }); position = null;
+          const gross = position.side * (exit / position.entry - 1); const net = gross - config.fee * 2; const grossR = position.side * (exit - position.entry) / position.riskPerUnit; const netR = grossR - (config.fee * 2 * position.entry / position.riskPerUnit); const riskCapital = Math.min(config.allocation, 0.05); const strategyReturn = netR * riskCapital;
+          const before = equity; equity *= Math.max(0.01, 1 + strategyReturn); trades.push({ side: position.side, entry: position.entry, initialStop: position.initialStop, finalStop: position.stop, target: position.target, exit, gross, net, grossR, netR, strategyReturn, reason, openedAt: position.openedAt, closedAt: i + 1, holding: i + 1 - position.openedAt, evidence: position.evidence, score: position.score, equityBefore: before, trailMoves: position.trailMoves, bestPrice: position.bestPrice }); position = null;
         }
       }
       peak = Math.max(peak, equity); maxDrawdown = Math.min(maxDrawdown, equity / peak - 1); equityCurve.push(equity);
@@ -137,11 +154,24 @@
     const wins = trades.filter(trade => trade.net > 0); const losses = trades.filter(trade => trade.net <= 0); const grossProfit = wins.reduce((sum, trade) => sum + trade.net, 0); const grossLoss = Math.abs(losses.reduce((sum, trade) => sum + trade.net, 0)); const returns = trades.map(trade => trade.strategyReturn); const average = returns.length ? returns.reduce((sum, value) => sum + value, 0) / returns.length : 0; const deviation = returns.length > 1 ? Math.sqrt(returns.reduce((sum, value) => sum + (value - average) ** 2, 0) / (returns.length - 1)) : 0;
     return { total: (equity - 1) * 100, maxDrawdown: maxDrawdown * 100, trades, winRate: trades.length ? wins.length / trades.length * 100 : 0, profitFactor: grossLoss ? grossProfit / grossLoss : grossProfit ? Infinity : 0, expectancy: average * 100, avgHolding: trades.length ? trades.reduce((sum, trade) => sum + trade.holding, 0) / trades.length : 0, sharpe: deviation ? average / deviation * Math.sqrt(returns.length) : 0, equityCurve };
   }
+  function displayTime(time) { return time ? new Date(time * 1000).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'; }
+  function renderPlan(config) {
+    const plan = get('trade-plan'); if (!state.candles?.length) { plan.textContent = '等待可用 K 线。'; return; }
+    const indicators = calculate(state.candles); const i = state.candles.length - 1; const signal = compositeSignal(i, state.candles, indicators, config); const recipe = recipes[config.recipe];
+    if (!signal.direction || !Number.isFinite(indicators.atr[i])) { plan.innerHTML = `<strong>${recipe.name}</strong><br><span>当前未满足入场条件；不会生成虚假入场计划。</span>`; return; }
+    const entry = state.candles[i].close; const risk = indicators.atr[i] * config.atrStop; const stop = signal.direction > 0 ? entry - risk : entry + risk; const target = signal.direction > 0 ? entry + risk * config.reward : entry - risk * config.reward; const direction = signal.direction > 0 ? '做多计划' : '做空计划';
+    plan.innerHTML = `<div class="plan-direction ${signal.direction > 0 ? 'plan-long' : 'plan-short'}">${direction} · 评分 ${fmt(signal.score * 100, 0)}%</div><div class="plan-grid"><div><span>拟入场</span><b>${fmt(entry)}</b></div><div><span>初始止损</span><b>${fmt(stop)}</b></div><div><span>目标止盈</span><b>${fmt(target)}</b></div><div><span>目标盈亏比</span><b>1 : ${fmt(config.reward, 1)}</b></div></div><p><b>入场理由：</b>${recipe.description} ${signal.evidence}</p><p><b>移动止损：</b>浮盈达到 1R 后，按 ${fmt(config.trail, 1)} ATR 跟随；止损只向盈利方向移动，最低锁定保本位。</p><p class="risk-note"><b>账户风险：</b>单笔最多 ${(config.allocation * 100).toFixed(1)}%（未含滑点）。</p>`;
+  }
+  function renderLedger(result, config) {
+    const rows = get('trade-ledger-rows'); const status = get('ledger-status'); if (!result.trades.length) { rows.innerHTML = '<tr><td colspan="12" class="empty-state">当前条件下没有已闭合交易。请更换策略、周期或过滤器后重试。</td></tr>'; status.textContent = '无已闭合交易可供复盘。'; return; }
+    rows.innerHTML = result.trades.slice().reverse().map((trade, index) => `<tr><td>${result.trades.length - index}</td><td><span class="side ${trade.side > 0 ? 'side-long' : 'side-short'}">${trade.side > 0 ? '多' : '空'}</span></td><td>${fmt(trade.entry)}</td><td>${fmt(trade.initialStop)}</td><td>${fmt(trade.finalStop)}${trade.trailMoves ? `<small>移动 ${trade.trailMoves} 次</small>` : ''}</td><td>${fmt(trade.target)}</td><td>${fmt(trade.exit)}</td><td>${trade.reason}</td><td class="${trade.net >= 0 ? 'positive' : 'negative'}">${percent(trade.net * 100)}</td><td class="${trade.netR >= 0 ? 'positive' : 'negative'}">${trade.netR >= 0 ? '+' : ''}${fmt(trade.netR)}R</td><td>${trade.holding} 根<br><small>${displayTime(state.candles[trade.openedAt]?.time)}</small></td><td class="ledger-evidence">${trade.evidence}</td></tr>`).join('');
+    status.textContent = `共 ${result.trades.length} 笔闭合交易。初始风险以 ${fmt(config.atrStop, 1)} ATR 计算；浮盈达到 1R 后以 ${fmt(config.trail, 1)} ATR 执行移动止损；实际 R 已扣除 ${(config.fee * 200).toFixed(2)}% 双边费率。`;
+  }
   function render(result, config) {
     const strategy = recipes[config.recipe]; const metrics = [['策略收益', percent(result.total), result.total >= 0], ['最大回撤', `${fmt(result.maxDrawdown)}%`, false], ['胜率', `${fmt(result.winRate, 1)}%`, result.winRate >= 50], ['交易次数', String(result.trades.length), true], ['盈亏比', result.profitFactor === Infinity ? '∞' : fmt(result.profitFactor, 2), result.profitFactor >= 1], ['单笔期望', percent(result.expectancy), result.expectancy >= 0], ['平均持仓', `${fmt(result.avgHolding, 1)} 根K线`, true], ['交易夏普', fmt(result.sharpe, 2), result.sharpe >= 0]];
     get('backtest').innerHTML = metrics.map(([label, value, positive]) => `<div><span>${label}</span><strong class="${positive ? 'positive' : 'negative'}">${value}</strong></div>`).join('');
-    const latestTrades = result.trades.slice(-3).reverse(); get('trade-summary').innerHTML = latestTrades.length ? `<strong>${strategy.name}</strong> · ${config.mode === 'template' ? '模板模式' : config.mode === 'confirmed' ? '确认模式' : '评分模式'}<br>${latestTrades.map(trade => `${trade.side > 0 ? '多' : '空'} ${fmt(trade.net * 100, 2)}% · ${trade.reason} · 持仓 ${trade.holding} 根`).join('<br>')}` : `<strong>${strategy.name}</strong> 在当前样本与参数下未生成满足条件的闭合交易。可调整周期、过滤器或风险参数后重试。`;
-    get('lab-status').textContent = `${strategy.name} 已按当前 ${state.interval} K线运行；使用 ${result.trades.length} 笔闭合交易、单边费率 ${(config.fee * 100).toFixed(2)}%、单笔风险 ${(config.allocation * 100).toFixed(1)}% 计算。`;
+    const latestTrades = result.trades.slice(-3).reverse(); get('trade-summary').innerHTML = latestTrades.length ? `<strong>${strategy.name}</strong> · ${config.mode === 'template' ? '模板模式' : config.mode === 'confirmed' ? '确认模式' : '评分模式'}<br>${latestTrades.map(trade => `${trade.side > 0 ? '多' : '空'} ${percent(trade.net * 100)} · ${trade.netR >= 0 ? '+' : ''}${fmt(trade.netR)}R · ${trade.reason}`).join('<br>')}` : `<strong>${strategy.name}</strong> 在当前样本与参数下未生成满足条件的闭合交易。可调整周期、过滤器或风险参数后重试。`;
+    renderPlan(config); renderLedger(result, config); get('lab-status').textContent = `${strategy.name} 已按当前 ${state.interval} K线运行；使用 ${result.trades.length} 笔闭合交易、初始止损 ${fmt(config.atrStop, 1)} ATR、移动止损 ${fmt(config.trail, 1)} ATR、单边费率 ${(config.fee * 100).toFixed(2)}%、单笔风险 ${(config.allocation * 100).toFixed(1)}% 计算。`;
   }
   function run() {
     if (!state.candles?.length || state.candles.length < 80) { get('lab-status').textContent = '需要至少 80 根有效 K 线后才能运行策略回测。'; return; }
