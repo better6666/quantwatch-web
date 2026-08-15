@@ -53,6 +53,9 @@ const SUPPORTED_INTERVALS = new Set(["1m", "5m", "15m", "30m", "1h", "4h", "1d",
 const CANDLE_CACHE_TTL_SECONDS = 300;
 const MAX_SYNC_BODY_BYTES = 256_000;
 const MAX_SYNC_ITEMS = 500;
+const SITE_ORIGIN = "https://better6666.github.io";
+const SITE_BASE_PATH = "/quantwatch-web";
+const CUSTOM_ORIGIN = "https://better789.dpdns.org";
 const makeAssets = (entries: ReadonlyArray<readonly [string, string, string]>, assetClass: AssetDescriptor["assetClass"], provider: string, availability: AssetDescriptor["availability"]): AssetDescriptor[] =>
   entries.map(([id, symbol, name]) => ({ id, symbol, name, assetClass, provider, availability }));
 
@@ -85,7 +88,7 @@ const demoSnapshot = (): Snapshot => ({
 
 function allowedOrigin(request: Request, env: Env): string {
   const origin = request.headers.get("Origin");
-  const allowed = new Set([env.ALLOWED_ORIGIN, "http://127.0.0.1:8787", "http://localhost:8787"]);
+  const allowed = new Set([env.ALLOWED_ORIGIN, CUSTOM_ORIGIN, "http://127.0.0.1:8787", "http://localhost:8787"]);
   return origin && allowed.has(origin) ? origin : env.ALLOWED_ORIGIN;
 }
 
@@ -228,6 +231,17 @@ async function cryptoCandles(request: Request, env: Env, symbol: string, interva
   }
 }
 
+async function proxyWebsite(request: Request, url: URL): Promise<Response> {
+  if (!["GET", "HEAD"].includes(request.method)) return new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
+  const upstream = new URL(`${SITE_BASE_PATH}${url.pathname === "/" ? "/" : url.pathname}`, SITE_ORIGIN);
+  upstream.search = url.search;
+  const response = await fetch(upstream.toString(), { method: request.method, headers: { Accept: request.headers.get("Accept") ?? "*/*", "Accept-Language": request.headers.get("Accept-Language") ?? "zh-CN" } });
+  const headers = new Headers(response.headers);
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  return new Response(request.method === "HEAD" ? null : response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 async function syncSnapshot(request: Request, env: Env): Promise<Response> {
   if (!env.SYNC_TOKEN) return noStoreJson({ error: "sync_unconfigured", message: "云端尚未配置同步密钥。" }, request, env, 503);
   if (request.headers.get("Authorization") !== `Bearer ${env.SYNC_TOKEN}`) return noStoreJson({ error: "unauthorized" }, request, env, 401);
@@ -258,8 +272,9 @@ export default {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(request, env) });
     try {
+      if (!url.pathname.startsWith("/api")) return proxyWebsite(request, url);
       if (request.method === "GET") {
-        if (url.pathname === "/" || url.pathname === "/api") return json({ name: env.APP_NAME, status: "ok", endpoints: ["/api/health", "/api/snapshot", "POST /api/snapshot", "/api/quotes", "/api/assets", "/api/candles?symbol=BTCUSDT&interval=4h&limit=350"], candleIntervals: [...SUPPORTED_INTERVALS], candleIntervalLabels: INTERVAL_LABELS, secondCandles: { available: false, message: "秒K需要逐笔成交数据或持久化实时数据流，当前公开 REST 数据源不提供可靠历史秒K。" } }, request, env);
+        if (url.pathname === "/api") return json({ name: env.APP_NAME, status: "ok", endpoints: ["/api/health", "/api/snapshot", "POST /api/snapshot", "/api/quotes", "/api/assets", "/api/candles?symbol=BTCUSDT&interval=4h&limit=350"], candleIntervals: [...SUPPORTED_INTERVALS], candleIntervalLabels: INTERVAL_LABELS, secondCandles: { available: false, message: "秒K需要逐笔成交数据或持久化实时数据流，当前公开 REST 数据源不提供可靠历史秒K。" } }, request, env);
         if (url.pathname === "/api/snapshot") return json(await latestSnapshot(env), request, env);
         if (url.pathname === "/api/quotes") { const snapshot = await latestSnapshot(env); return json({ generatedAt: snapshot.generatedAt, source: snapshot.source, quotes: snapshot.items.map(({ ticker, name, price, changePct, updatedAt }) => ({ ticker, name, price, changePct, updatedAt })) }, request, env); }
         if (url.pathname === "/api/assets") return json({ generatedAt: new Date().toISOString(), assets: ASSETS }, request, env);
