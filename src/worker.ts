@@ -161,15 +161,23 @@ async function latestSnapshot(env: Env): Promise<Snapshot> {
 }
 
 type Candle = { time: number; open: number; high: number; low: number; close: number; volume: number };
-type CandlePayload = { instrument: AssetDescriptor; interval: string; source: string; volumeAvailable: true; cachedAt: string; candles: Candle[] };
+type SampleMetadata = { dataPolicy: "closed_candles_only"; providerMaxCandles: number; requestedCandles: number; returnedCandles: number; startTime: string; endTime: string; fetchedAt: string; excludedCurrentCandle: true; gapCount: number; continuous: boolean };
+type CandlePayload = { instrument: AssetDescriptor; interval: string; source: string; volumeAvailable: true; cachedAt: string; sample: SampleMetadata; candles: Candle[] };
 type KrakenPayload = { error?: unknown; result?: Record<string, unknown> };
 
 const KRAKEN_PAIRS: Record<string, string> = { BTCUSDT: "XBTUSD", ETHUSDT: "ETHUSD", SOLUSDT: "SOLUSD", BNBUSDT: "BNBUSD", XRPUSDT: "XRPUSD", ADAUSDT: "ADAUSD", DOGEUSDT: "DOGEUSD", AVAXUSDT: "AVAXUSD", LINKUSDT: "LINKUSD", DOTUSDT: "DOTUSD" };
-const KRAKEN_INTERVALS: Record<string, string> = { "1m": "1", "5m": "5", "15m": "15", "30m": "30", "1h": "60", "4h": "240", "1d": "1440", "1w": "10080", "1M": "1440" };
+const KRAKEN_INTERVALS: Record<string, string> = { "1m": "1", "5m": "5", "15m": "15", "30m": "30", "1h": "60", "4h": "240", "1d": "1440", "1w": "10080", "1M": "21600" };
 const INTERVAL_LABELS: Record<string, string> = { "1m": "1 分钟", "5m": "5 分钟", "15m": "15 分钟", "30m": "30 分钟", "1h": "1 小时", "4h": "4 小时", "1d": "日线", "1w": "周线", "1M": "月线" };
 
 function candleCacheKey(symbol: string, interval: string): string {
-  return `quantwatch:candles:v1:${symbol}:${interval}`;
+  return `quantwatch:candles:v2:${symbol}:${interval}`;
+}
+
+const INTERVAL_SECONDS: Record<string, number> = { "1m": 60, "5m": 300, "15m": 900, "30m": 1_800, "1h": 3_600, "4h": 14_400, "1d": 86_400, "1w": 604_800, "1M": 0 };
+function countGaps(candles: Candle[], interval: string): number {
+  const expected = INTERVAL_SECONDS[interval];
+  if (!expected || candles.length < 2) return 0;
+  return candles.slice(1).reduce((count, candle, index) => count + (candle.time - candles[index].time > expected * 1.5 ? 1 : 0), 0);
 }
 
 function parseKrakenCandles(payload: unknown): Candle[] {
@@ -209,7 +217,7 @@ async function cryptoCandles(request: Request, env: Env, symbol: string, interva
     try { return noStoreJson(JSON.parse(cached), request, env, 200); } catch { await env.SNAPSHOT_CACHE.delete(key); }
   }
   try {
-    const count = Math.min(Math.max(limit, 60), 720);
+    const count = Math.min(Math.max(limit, 60), 719);
     const pair = KRAKEN_PAIRS[symbol];
     const krakenInterval = KRAKEN_INTERVALS[interval];
     if (!pair || !krakenInterval) return noStoreJson({ error: "asset_not_available", message: "该标的没有可用的 Kraken 数据映射。" }, request, env, 400);
@@ -219,10 +227,14 @@ async function cryptoCandles(request: Request, env: Env, symbol: string, interva
     const upstream = await fetch(endpoint.toString(), { headers: { Accept: "application/json" }, cf: { cacheTtl: CANDLE_CACHE_TTL_SECONDS, cacheEverything: true } });
     if (!upstream.ok) return noStoreJson({ error: "upstream_unavailable", message: `公开数据源返回 HTTP ${upstream.status}，请稍后重试。` }, request, env, 502);
     const parsed = parseKrakenCandles(await upstream.json());
-    const candles = (interval === "1M" ? aggregateMonthly(parsed) : parsed).slice(-count);
+    /* Kraken documents its final OHLC row as the active, not-yet-committed period. It is excluded from every research response. */
+    const committed = parsed.slice(0, -1);
+    const candles = committed.slice(-count);
     const minimumCandles = interval === "1M" ? 12 : interval === "1w" ? 20 : 60;
-    if (candles.length < minimumCandles) return noStoreJson({ error: "insufficient_candles", message: `公开数据源返回 ${candles.length} 根 K 线，少于 ${INTERVAL_LABELS[interval]} 所需的最低样本量 ${minimumCandles}。` }, request, env, 502);
-    const response: CandlePayload = { instrument: asset, interval, source: `Kraken OHLC · ${INTERVAL_LABELS[interval]}（5 分钟 Cloudflare 缓存）`, volumeAvailable: true, cachedAt: new Date().toISOString(), candles };
+    if (candles.length < minimumCandles) return noStoreJson({ error: "insufficient_candles", message: `公开数据源返回 ${candles.length} 根已收盘 K 线，少于 ${INTERVAL_LABELS[interval]} 所需的最低样本量 ${minimumCandles}。` }, request, env, 502);
+    const fetchedAt = new Date().toISOString(); const gapCount = countGaps(candles, interval);
+    const sample: SampleMetadata = { dataPolicy: "closed_candles_only", providerMaxCandles: 720, requestedCandles: count, returnedCandles: candles.length, startTime: new Date(candles[0].time * 1000).toISOString(), endTime: new Date(candles.at(-1)!.time * 1000).toISOString(), fetchedAt, excludedCurrentCandle: true, gapCount, continuous: gapCount === 0 };
+    const response: CandlePayload = { instrument: asset, interval, source: `Kraken OHLC · ${INTERVAL_LABELS[interval]} · 仅已收盘K线（5 分钟 Cloudflare 缓存）`, volumeAvailable: true, cachedAt: fetchedAt, sample, candles };
     await env.SNAPSHOT_CACHE.put(key, JSON.stringify(response), { expirationTtl: CANDLE_CACHE_TTL_SECONDS });
     return noStoreJson(response, request, env, 200);
   } catch (error) {

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="QuantWatch 多资产量化研究终端：真实加密K线、指标、策略、观察列表与市场扫描。" />
   <title>QuantWatch Research Terminal</title>
-  <link rel="stylesheet" href="./research.css?v=chart-ledger-v2" />
+  <link rel="stylesheet" href="./research.css?v=research-rigor-v1" />
 </head>
 <body>
   <main class="shell">
@@ -34,7 +34,7 @@
         <article class="strategy-card"><h3 id="strategy-name">策略说明</h3><p id="strategy-description">正在加载策略说明。</p></article>
         <div class="divider"></div>
         <p class="section-title">策略实验室</p>
-        <section id="strategy-lab" class="strategy-lab"><div class="field"><label for="lab-strategy">研究配方</label><select id="lab-strategy"></select></div><div class="field"><label for="entry-mode">信号组合</label><select id="entry-mode"><option value="template">仅使用策略模板</option><option value="confirmed">策略模板 + 过滤器确认</option><option value="score">多因子评分模式</option></select></div><div class="filter-grid"><label><input id="filter-trend" type="checkbox" checked /> 趋势过滤</label><label><input id="filter-momentum" type="checkbox" /> 动量过滤</label><label><input id="filter-volume" type="checkbox" /> 成交量确认</label><label><input id="filter-volatility" type="checkbox" /> 波动率过滤</label></div><div class="risk-grid"><div class="field"><label for="risk-atr">初始止损 ATR 倍数</label><input id="risk-atr" type="number" min="0.5" max="8" step="0.5" value="2" /></div><div class="field"><label for="risk-reward">目标盈亏比</label><input id="risk-reward" type="number" min="0.5" max="8" step="0.5" value="2" /></div><div class="field"><label for="risk-trail">移动止损 ATR 倍数</label><input id="risk-trail" type="number" min="0.5" max="8" step="0.5" value="2.5" /></div><div class="field"><label for="risk-fee">单边费率（%）</label><input id="risk-fee" type="number" min="0" max="2" step="0.01" value="0.08" /></div><div class="field"><label for="risk-allocation">单笔风险（%）</label><input id="risk-allocation" type="number" min="0.1" max="10" step="0.1" value="1" /></div></div><button id="run-backtest" class="run-backtest" type="button">运行策略回测</button><p id="lab-status" class="control-hint">可将趋势、动量、成交量和波动率作为入场确认条件；所有参数只在当前浏览器保存。</p></section>
+        <section id="strategy-lab" class="strategy-lab"><div class="field"><label for="lab-strategy">研究配方</label><select id="lab-strategy"></select></div><div class="field"><label for="entry-mode">信号组合</label><select id="entry-mode"><option value="template">仅使用策略模板</option><option value="confirmed">策略模板 + 过滤器确认</option><option value="score">多因子评分模式</option></select></div><div class="filter-grid"><label><input id="filter-trend" type="checkbox" checked /> 趋势过滤</label><label><input id="filter-momentum" type="checkbox" /> 动量过滤</label><label><input id="filter-volume" type="checkbox" /> 成交量确认</label><label><input id="filter-volatility" type="checkbox" /> 波动率过滤</label></div><div class="risk-grid"><div class="field"><label for="risk-atr">初始止损 ATR 倍数</label><input id="risk-atr" type="number" min="0.5" max="8" step="0.5" value="2" /></div><div class="field"><label for="risk-reward">目标盈亏比</label><input id="risk-reward" type="number" min="0.5" max="8" step="0.5" value="2" /></div><div class="field"><label for="risk-trail">移动止损 ATR 倍数</label><input id="risk-trail" type="number" min="0.5" max="8" step="0.5" value="2.5" /></div><div class="field"><label for="risk-fee">单边费率（%）</label><input id="risk-fee" type="number" min="0" max="2" step="0.01" value="0.08" /></div><div class="field"><label for="risk-allocation">单笔风险（%）</label><input id="risk-allocation" type="number" min="0.1" max="10" step="0.1" value="1" /></div><div class="field"><label for="risk-slippage">单边滑点（bp）</label><input id="risk-slippage" type="number" min="0" max="500" step="1" value="5" /></div><div class="field"><label for="risk-max-hold">最大持仓（根K线）</label><input id="risk-max-hold" type="number" min="2" max="500" step="1" value="48" /></div></div><div class="field validation-field"><label for="validation-split">样本外验证比例（%）</label><input id="validation-split" type="number" min="10" max="50" step="5" value="30" /><small>按时间顺序留出末段样本，只用于验证；参数不得在查看该段结果后再调整。</small></div><button id="run-backtest" class="run-backtest" type="button">运行策略回测</button><p id="lab-status" class="control-hint">可将趋势、动量、成交量和波动率作为入场确认条件；所有参数只在当前浏览器保存。</p></section>
         <div class="divider"></div>
         <p class="section-title">我的观察列表</p>
         <div id="watchlist" class="watchlist"><p class="empty-state">尚未添加标的。选择资产后可加入观察列表。</p></div>
@@ -53,8 +53,9 @@
         <section><p class="section-title">当前研究信号</p><div class="signal-box"><div class="signal-top"><span id="signal" class="badge neutral">计算中</span><span id="signal-score" class="score">—</span></div><p id="strategy-evidence" class="evidence">等待K线数据。</p></div></section>
         <div class="divider"></div>
         <section><p class="section-title">技术指标快照</p><div id="indicators" class="indicators"><div class="indicator"><span>载入中</span><strong>—</strong></div></div></section>
+        <div class="divider"></div><section><p class="section-title">数据与实验口径</p><div id="data-audit" class="data-audit">等待已收盘样本验证。</div></section>
         <div class="divider"></div>
-        <section><p class="section-title">当前交易计划</p><div id="trade-plan" class="trade-plan">等待可用研究信号。</div></section><div class="divider"></div><section><p class="section-title">策略回测结果</p><div id="backtest" class="backtest"><div><span>策略收益</span><strong>—</strong></div></div><div id="trade-summary" class="trade-summary">等待运行策略回测。</div><p class="disclaimer">回测以收盘确认、初始 ATR 止损、目标止盈、移动止损、固定单笔风险和输入费率估算；若同根K线同时触及止损和止盈，采用保守的止损优先原则。它不包含滑点、流动性、资金费率、爆仓、税费或未来数据，不构成交易建议。</p></section>
+        <section><p class="section-title">当前交易计划</p><div id="trade-plan" class="trade-plan">等待可用研究信号。</div></section><div class="divider"></div><section><p class="section-title">策略回测结果</p><div id="backtest" class="backtest"><div><span>策略收益</span><strong>—</strong></div></div><div id="trade-summary" class="trade-summary">等待运行策略回测。</div><p class="disclaimer">回测以已收盘 K 线、下一根开盘成交、输入费率与滑点、初始 ATR 止损、目标止盈、移动止损及最大持仓期估算；同根K线同时触及止损和止盈时，采用保守的止损优先原则。样本外分段仅用于验证，不应用来反复调参。它未包含真实盘口冲击、资金费率、爆仓、税费或未来数据，不构成交易建议。</p></section>
       </div></aside>
     </section>
 
@@ -69,7 +70,7 @@
     <section class="panel roadmap"><h2>完全体路线</h2><p>系统按统一资产、数据、指标、策略和回测协议逐步扩展。查看 <a href="./ROADMAP.md">架构路线图</a>，了解多市场数据授权、批量扫描和专业研究层的实施边界。</p></section>
   </main>
   <script src="./vendor/lightweight-charts-5.2.1.js"></script>
-  <script src="./app.js?v=09fe390"></script>
-  <script src="./strategy-lab.js?v=09fe390"></script>
+  <script src="./app.js?v=research-rigor-v1"></script>
+  <script src="./strategy-lab.js?v=research-rigor-v1"></script>
 </body>
 </html>
