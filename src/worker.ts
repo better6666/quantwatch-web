@@ -174,7 +174,7 @@ const INTERVAL_LABELS: Record<string, string> = { "1m": "1 分钟", "5m": "5 分
 function candleCacheKey(symbol: string, interval: string): string {
   return `quantwatch:candles:v3:${symbol}:${interval}`;
 }
-const ASSET_DIRECTORY_CACHE_KEY = "quantwatch:asset-directory:v1"; const DIRECTORY_CACHE_TTL_SECONDS = ONE_DAY_SECONDS;
+const ASSET_DIRECTORY_CACHE_KEY = "quantwatch:asset-directory:v2"; const DIRECTORY_CACHE_TTL_SECONDS = ONE_DAY_SECONDS;
 
 
 const INTERVAL_SECONDS: Record<string, number> = { "1m": 60, "5m": 300, "15m": 900, "30m": 1_800, "1h": 3_600, "4h": 14_400, "1d": 86_400, "1w": 604_800, "1M": 0 };
@@ -256,7 +256,7 @@ async function publicAssetDirectory(request: Request, env: Env): Promise<Respons
     const upstream = await fetch("https://api.kraken.com/0/public/AssetPairs?assetVersion=1", { headers: { Accept: "application/json" }, cf: { cacheTtl: DIRECTORY_CACHE_TTL_SECONDS, cacheEverything: true } });
     const payload = await upstream.json() as { result?: Record<string, { altname?: string; wsname?: string; base?: string; quote?: string; status?: string }> };
     const crypto = Object.values(payload.result ?? {}).filter(pair => pair.status === "online" && pair.quote === "USD" && pair.altname && pair.wsname).map(pair => ({ id: `KRAKEN:${pair.altname}`, symbol: pair.wsname!, name: `${pair.base} / USD`, assetClass: "crypto" as const, provider: "Kraken 公开 OHLC · 分钟至月线", availability: "public" as const })).sort((a, b) => a.symbol.localeCompare(b.symbol)).slice(0, 400);
-    const directory = { generatedAt: new Date().toISOString(), assets: [...crypto, ...ASSETS.filter(asset => asset.assetClass !== "crypto")] };
+    const directory = { generatedAt: new Date().toISOString(), assets: [...ASSETS.filter(asset => asset.assetClass === "crypto"), ...crypto, ...ASSETS.filter(asset => asset.assetClass !== "crypto")] };
     await env.SNAPSHOT_CACHE.put(ASSET_DIRECTORY_CACHE_KEY, JSON.stringify(directory), { expirationTtl: DIRECTORY_CACHE_TTL_SECONDS });
     return json(directory, request, env);
   } catch { return json({ generatedAt: new Date().toISOString(), assets: ASSETS }, request, env); }
