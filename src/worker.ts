@@ -59,10 +59,12 @@ const CUSTOM_ORIGIN = "https://better789.dpdns.org";
 const makeAssets = (entries: ReadonlyArray<readonly [string, string, string]>, assetClass: AssetDescriptor["assetClass"], provider: string, availability: AssetDescriptor["availability"]): AssetDescriptor[] =>
   entries.map(([id, symbol, name]) => ({ id, symbol, name, assetClass, provider, availability }));
 
+const FREE_STOCKS = [["AAPL", "AAPL", "Apple"], ["MSFT", "MSFT", "Microsoft"], ["NVDA", "NVDA", "NVIDIA"], ["AMZN", "AMZN", "Amazon"], ["GOOGL", "GOOGL", "Alphabet A"], ["GOOG", "GOOG", "Alphabet C"], ["META", "META", "Meta Platforms"], ["TSLA", "TSLA", "Tesla"], ["AVGO", "AVGO", "Broadcom"], ["BRK-B", "BRK-B", "Berkshire Hathaway B"], ["JPM", "JPM", "JPMorgan Chase"], ["V", "V", "Visa"], ["MA", "MA", "Mastercard"], ["UNH", "UNH", "UnitedHealth"], ["XOM", "XOM", "Exxon Mobil"], ["LLY", "LLY", "Eli Lilly"], ["WMT", "WMT", "Walmart"], ["COST", "COST", "Costco"], ["HD", "HD", "Home Depot"], ["PG", "PG", "Procter & Gamble"], ["JNJ", "JNJ", "Johnson & Johnson"], ["AMD", "AMD", "Advanced Micro Devices"], ["INTC", "INTC", "Intel"], ["QCOM", "QCOM", "Qualcomm"], ["ORCL", "ORCL", "Oracle"], ["CRM", "CRM", "Salesforce"], ["ADBE", "ADBE", "Adobe"], ["CSCO", "CSCO", "Cisco"], ["NFLX", "NFLX", "Netflix"], ["DIS", "DIS", "Walt Disney"], ["BA", "BA", "Boeing"], ["GE", "GE", "GE Aerospace"], ["CAT", "CAT", "Caterpillar"], ["NKE", "NKE", "Nike"], ["MCD", "MCD", "McDonald's"], ["SBUX", "SBUX", "Starbucks"]] as const;
+const FREE_ETFS = [["SPY", "SPY", "SPDR S&P 500 ETF"], ["QQQ", "QQQ", "Invesco QQQ ETF"], ["IWM", "IWM", "iShares Russell 2000 ETF"], ["DIA", "DIA", "SPDR Dow Jones ETF"], ["VTI", "VTI", "Vanguard Total Stock Market ETF"], ["VOO", "VOO", "Vanguard S&P 500 ETF"], ["XLK", "XLK", "Technology Select Sector ETF"], ["XLF", "XLF", "Financial Select Sector ETF"], ["XLE", "XLE", "Energy Select Sector ETF"], ["XLV", "XLV", "Health Care Select Sector ETF"], ["XLY", "XLY", "Consumer Discretionary ETF"], ["XLP", "XLP", "Consumer Staples ETF"], ["XLI", "XLI", "Industrial Select Sector ETF"], ["XLB", "XLB", "Materials Select Sector ETF"], ["XLU", "XLU", "Utilities Select Sector ETF"], ["GLD", "GLD", "SPDR Gold Shares"], ["SLV", "SLV", "iShares Silver Trust"], ["TLT", "TLT", "iShares 20+ Year Treasury Bond ETF"], ["HYG", "HYG", "iShares High Yield Bond ETF"], ["LQD", "LQD", "iShares Investment Grade Bond ETF"], ["USO", "USO", "United States Oil Fund"], ["UNG", "UNG", "United States Natural Gas Fund"], ["EEM", "EEM", "iShares MSCI Emerging Markets ETF"], ["FXI", "FXI", "iShares China Large-Cap ETF"], ["ARKK", "ARKK", "ARK Innovation ETF"]] as const;
 const ASSETS: AssetDescriptor[] = [
   ...makeAssets([["BTCUSDT", "BTC/USD", "Bitcoin"], ["ETHUSDT", "ETH/USD", "Ethereum"], ["SOLUSDT", "SOL/USD", "Solana"], ["BNBUSDT", "BNB/USD", "BNB"], ["XRPUSDT", "XRP/USD", "XRP"], ["ADAUSDT", "ADA/USD", "Cardano"], ["DOGEUSDT", "DOGE/USD", "Dogecoin"], ["AVAXUSDT", "AVAX/USD", "Avalanche"], ["LINKUSDT", "LINK/USD", "Chainlink"], ["DOTUSDT", "DOT/USD", "Polkadot"]], "crypto", "Kraken OHLC（云端缓存）", "public"),
-  ...makeAssets([["AAPL", "AAPL", "Apple"], ["MSFT", "MSFT", "Microsoft"], ["NVDA", "NVDA", "NVIDIA"]], "stock", "授权数据源待配置", "requires_authorized_provider"),
-  ...makeAssets([["SPY", "SPY", "SPDR S&P 500 ETF"], ["QQQ", "QQQ", "Invesco QQQ ETF"], ["GLD", "GLD", "SPDR Gold Shares"]], "etf", "授权数据源待配置", "requires_authorized_provider")
+  ...makeAssets(FREE_STOCKS, "stock", "Yahoo Finance 公共日/周/月线", "public"),
+  ...makeAssets(FREE_ETFS, "etf", "Yahoo Finance 公共日/周/月线", "public")
 ];
 
 
@@ -170,8 +172,10 @@ const KRAKEN_INTERVALS: Record<string, string> = { "1m": "1", "5m": "5", "15m": 
 const INTERVAL_LABELS: Record<string, string> = { "1m": "1 分钟", "5m": "5 分钟", "15m": "15 分钟", "30m": "30 分钟", "1h": "1 小时", "4h": "4 小时", "1d": "日线", "1w": "周线", "1M": "月线" };
 
 function candleCacheKey(symbol: string, interval: string): string {
-  return `quantwatch:candles:v2:${symbol}:${interval}`;
+  return `quantwatch:candles:v3:${symbol}:${interval}`;
 }
+const ASSET_DIRECTORY_CACHE_KEY = "quantwatch:asset-directory:v1"; const DIRECTORY_CACHE_TTL_SECONDS = ONE_DAY_SECONDS;
+
 
 const INTERVAL_SECONDS: Record<string, number> = { "1m": 60, "5m": 300, "15m": 900, "30m": 1_800, "1h": 3_600, "4h": 14_400, "1d": 86_400, "1w": 604_800, "1M": 0 };
 function countGaps(candles: Candle[], interval: string): number {
@@ -208,8 +212,10 @@ function aggregateMonthly(candles: Candle[]): Candle[] {
 }
 
 async function cryptoCandles(request: Request, env: Env, symbol: string, interval: string, limit: number): Promise<Response> {
-  const asset = ASSETS.find(candidate => candidate.id === symbol && candidate.availability === "public");
-  if (!asset) return noStoreJson({ error: "asset_not_available", message: "该标的当前未配置公开数据源。" }, request, env, 400);
+  const staticAsset = ASSETS.find(candidate => candidate.id === symbol && candidate.assetClass === "crypto");
+  const dynamicPair = symbol.startsWith("KRAKEN:") ? symbol.slice("KRAKEN:".length) : "";
+  const asset = staticAsset ?? (dynamicPair && /^[A-Z0-9]+$/.test(dynamicPair) ? { id: symbol, symbol: dynamicPair, name: `${dynamicPair} · Kraken`, assetClass: "crypto" as const, provider: "Kraken OHLC（云端缓存）", availability: "public" as const } : null);
+  if (!asset) return noStoreJson({ error: "asset_not_available", message: "该标的当前没有可用的公开加密数据。" }, request, env, 400);
   if (!SUPPORTED_INTERVALS.has(interval)) return noStoreJson({ error: "interval_not_supported", supported: [...SUPPORTED_INTERVALS], message: "当前公开数据源提供分钟、小时、日、周与月线；秒K需接入逐笔成交数据源。" }, request, env, 400);
   const key = candleCacheKey(symbol, interval);
   const cached = await env.SNAPSHOT_CACHE.get(key);
@@ -218,7 +224,7 @@ async function cryptoCandles(request: Request, env: Env, symbol: string, interva
   }
   try {
     const count = Math.min(Math.max(limit, 60), 719);
-    const pair = KRAKEN_PAIRS[symbol];
+    const pair = dynamicPair || KRAKEN_PAIRS[symbol];
     const krakenInterval = KRAKEN_INTERVALS[interval];
     if (!pair || !krakenInterval) return noStoreJson({ error: "asset_not_available", message: "该标的没有可用的 Kraken 数据映射。" }, request, env, 400);
     const endpoint = new URL("https://api.kraken.com/0/public/OHLC");
@@ -242,6 +248,24 @@ async function cryptoCandles(request: Request, env: Env, symbol: string, interva
     return noStoreJson({ error: "upstream_unavailable", message: `公开数据源暂不可用：${message}` }, request, env, 502);
   }
 }
+
+async function publicAssetDirectory(request: Request, env: Env): Promise<Response> {
+  const cached = await env.SNAPSHOT_CACHE.get(ASSET_DIRECTORY_CACHE_KEY);
+  if (cached) { try { return json(JSON.parse(cached), request, env); } catch { await env.SNAPSHOT_CACHE.delete(ASSET_DIRECTORY_CACHE_KEY); } }
+  try {
+    const upstream = await fetch("https://api.kraken.com/0/public/AssetPairs?assetVersion=1", { headers: { Accept: "application/json" }, cf: { cacheTtl: DIRECTORY_CACHE_TTL_SECONDS, cacheEverything: true } });
+    const payload = await upstream.json() as { result?: Record<string, { altname?: string; wsname?: string; base?: string; quote?: string; status?: string }> };
+    const crypto = Object.values(payload.result ?? {}).filter(pair => pair.status === "online" && pair.quote === "USD" && pair.altname && pair.wsname).map(pair => ({ id: `KRAKEN:${pair.altname}`, symbol: pair.wsname!, name: `${pair.base} / USD`, assetClass: "crypto" as const, provider: "Kraken 公开 OHLC · 分钟至月线", availability: "public" as const })).sort((a, b) => a.symbol.localeCompare(b.symbol)).slice(0, 400);
+    const directory = { generatedAt: new Date().toISOString(), assets: [...crypto, ...ASSETS.filter(asset => asset.assetClass !== "crypto")] };
+    await env.SNAPSHOT_CACHE.put(ASSET_DIRECTORY_CACHE_KEY, JSON.stringify(directory), { expirationTtl: DIRECTORY_CACHE_TTL_SECONDS });
+    return json(directory, request, env);
+  } catch { return json({ generatedAt: new Date().toISOString(), assets: ASSETS }, request, env); }
+}
+
+type YahooPayload = { chart?: { result?: Array<{ timestamp?: number[]; indicators?: { quote?: Array<{ open?: Array<number | null>; high?: Array<number | null>; low?: Array<number | null>; close?: Array<number | null>; volume?: Array<number | null> }> } }> } };
+function parseYahooCandles(payload: YahooPayload): Candle[] { const result = payload.chart?.result?.[0]; const quote = result?.indicators?.quote?.[0]; if (!result?.timestamp || !quote?.open || !quote.high || !quote.low || !quote.close) return []; return result.timestamp.map((time, i) => ({ time, open: Number(quote.open?.[i]), high: Number(quote.high?.[i]), low: Number(quote.low?.[i]), close: Number(quote.close?.[i]), volume: Number(quote.volume?.[i] ?? 0) })).filter(candle => [candle.time, candle.open, candle.high, candle.low, candle.close].every(Number.isFinite)); }
+async function yahooCandles(request: Request, env: Env, asset: AssetDescriptor, interval: string, limit: number): Promise<Response> { if (!new Set(["1d", "1w", "1M"]).has(interval)) return noStoreJson({ error: "interval_not_supported", supported: ["1d", "1w", "1M"], message: "免费股票与 ETF 研究数据当前提供日线、周线和月线；分钟线需使用专业数据源。" }, request, env, 400); const key = candleCacheKey(asset.id, interval); const cached = await env.SNAPSHOT_CACHE.get(key); if (cached) { try { return noStoreJson(JSON.parse(cached), request, env, 200); } catch { await env.SNAPSHOT_CACHE.delete(key); } } const yahooInterval = interval === "1w" ? "1wk" : interval === "1M" ? "1mo" : "1d"; const endpoint = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(asset.symbol)}`); endpoint.searchParams.set("range", interval === "1d" ? "10y" : "max"); endpoint.searchParams.set("interval", yahooInterval); endpoint.searchParams.set("events", "history"); const upstream = await fetch(endpoint.toString(), { headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0 QuantWatchResearch/1.0" }, cf: { cacheTtl: CANDLE_CACHE_TTL_SECONDS, cacheEverything: true } }); if (!upstream.ok) return noStoreJson({ error: "upstream_unavailable", message: `免费日线数据源返回 HTTP ${upstream.status}。` }, request, env, 502); const candles = parseYahooCandles(await upstream.json() as YahooPayload).slice(0, -1).slice(-Math.min(Math.max(limit, 60), 2000)); if (candles.length < 60) return noStoreJson({ error: "insufficient_candles", message: "免费日线数据样本不足 60 根。" }, request, env, 502); const fetchedAt = new Date().toISOString(); const gapCount = countGaps(candles, interval); const sample: SampleMetadata = { dataPolicy: "closed_candles_only", providerMaxCandles: 0, requestedCandles: limit, returnedCandles: candles.length, startTime: new Date(candles[0].time * 1000).toISOString(), endTime: new Date(candles.at(-1)!.time * 1000).toISOString(), fetchedAt, excludedCurrentCandle: true, gapCount, continuous: gapCount === 0 }; const response: CandlePayload = { instrument: asset, interval, source: `Yahoo Finance 公开${INTERVAL_LABELS[interval]}研究数据 · 仅已收盘K线（5 分钟 Cloudflare 缓存）`, volumeAvailable: true, cachedAt: fetchedAt, sample, candles }; await env.SNAPSHOT_CACHE.put(key, JSON.stringify(response), { expirationTtl: CANDLE_CACHE_TTL_SECONDS }); return noStoreJson(response, request, env, 200); }
+async function publicCandles(request: Request, env: Env, symbol: string, interval: string, limit: number): Promise<Response> { const asset = ASSETS.find(candidate => candidate.id === symbol); return asset && asset.assetClass !== "crypto" ? yahooCandles(request, env, asset, interval, limit) : cryptoCandles(request, env, symbol, interval, limit); }
 
 async function proxyWebsite(request: Request, url: URL): Promise<Response> {
   if (!["GET", "HEAD"].includes(request.method)) return new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
@@ -289,8 +313,8 @@ export default {
         if (url.pathname === "/api") return json({ name: env.APP_NAME, status: "ok", endpoints: ["/api/health", "/api/snapshot", "POST /api/snapshot", "/api/quotes", "/api/assets", "/api/candles?symbol=BTCUSDT&interval=4h&limit=350"], candleIntervals: [...SUPPORTED_INTERVALS], candleIntervalLabels: INTERVAL_LABELS, secondCandles: { available: false, message: "秒K需要逐笔成交数据或持久化实时数据流，当前公开 REST 数据源不提供可靠历史秒K。" } }, request, env);
         if (url.pathname === "/api/snapshot") return json(await latestSnapshot(env), request, env);
         if (url.pathname === "/api/quotes") { const snapshot = await latestSnapshot(env); return json({ generatedAt: snapshot.generatedAt, source: snapshot.source, quotes: snapshot.items.map(({ ticker, name, price, changePct, updatedAt }) => ({ ticker, name, price, changePct, updatedAt })) }, request, env); }
-        if (url.pathname === "/api/assets") return json({ generatedAt: new Date().toISOString(), assets: ASSETS }, request, env);
-        if (url.pathname === "/api/candles") return cryptoCandles(request, env, url.searchParams.get("symbol")?.toUpperCase() ?? "", url.searchParams.get("interval") ?? "4h", Number(url.searchParams.get("limit") ?? 350));
+        if (url.pathname === "/api/assets") return publicAssetDirectory(request, env);
+        if (url.pathname === "/api/candles") return publicCandles(request, env, url.searchParams.get("symbol")?.toUpperCase() ?? "", url.searchParams.get("interval") ?? "4h", Number(url.searchParams.get("limit") ?? 350));
         if (url.pathname === "/api/health") { const runtime = await env.DB.prepare("SELECT value, updated_at FROM runtime_state WHERE key = ?").bind("last_cron_at").first<{ value: string; updated_at: string }>(); const sync = await env.DB.prepare("SELECT value, updated_at FROM runtime_state WHERE key = ?").bind("last_local_sync_generated_at").first<{ value: string; updated_at: string }>(); const snapshot = await latestSnapshot(env); return json({ status: "ok", app: env.APP_NAME, generatedAt: snapshot.generatedAt, source: snapshot.source, cron: runtime ?? null, sync: { configured: Boolean(env.SYNC_TOKEN), lastAccepted: sync ?? null } }, request, env); }
         return noStoreJson({ error: "not_found" }, request, env, 404);
       }
