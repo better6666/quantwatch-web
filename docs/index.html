@@ -33,6 +33,9 @@
         <div class="field"><label for="strategy">策略模板</label><select id="strategy"></select></div>
         <article class="strategy-card"><h3 id="strategy-name">策略说明</h3><p id="strategy-description">正在加载策略说明。</p></article>
         <div class="divider"></div>
+        <p class="section-title">策略实验室</p>
+        <section id="strategy-lab" class="strategy-lab"><div class="field"><label for="lab-strategy">研究配方</label><select id="lab-strategy"></select></div><div class="field"><label for="entry-mode">信号组合</label><select id="entry-mode"><option value="template">仅使用策略模板</option><option value="confirmed">策略模板 + 过滤器确认</option><option value="score">多因子评分模式</option></select></div><div class="filter-grid"><label><input id="filter-trend" type="checkbox" checked /> 趋势过滤</label><label><input id="filter-momentum" type="checkbox" /> 动量过滤</label><label><input id="filter-volume" type="checkbox" /> 成交量确认</label><label><input id="filter-volatility" type="checkbox" /> 波动率过滤</label></div><div class="risk-grid"><div class="field"><label for="risk-atr">止损 ATR 倍数</label><input id="risk-atr" type="number" min="0.5" max="8" step="0.5" value="2" /></div><div class="field"><label for="risk-reward">目标盈亏比</label><input id="risk-reward" type="number" min="0.5" max="8" step="0.5" value="2" /></div><div class="field"><label for="risk-fee">单边费率（%）</label><input id="risk-fee" type="number" min="0" max="2" step="0.01" value="0.08" /></div><div class="field"><label for="risk-allocation">单笔风险（%）</label><input id="risk-allocation" type="number" min="0.1" max="10" step="0.1" value="1" /></div></div><button id="run-backtest" class="run-backtest" type="button">运行策略回测</button><p id="lab-status" class="control-hint">可将趋势、动量、成交量和波动率作为入场确认条件；所有参数只在当前浏览器保存。</p></section>
+        <div class="divider"></div>
         <p class="section-title">我的观察列表</p>
         <div id="watchlist" class="watchlist"><p class="empty-state">尚未添加标的。选择资产后可加入观察列表。</p></div>
         <div class="divider"></div>
@@ -50,7 +53,7 @@
         <div class="divider"></div>
         <section><p class="section-title">技术指标快照</p><div id="indicators" class="indicators"><div class="indicator"><span>载入中</span><strong>—</strong></div></div></section>
         <div class="divider"></div>
-        <section><p class="section-title">轻量历史评估</p><div id="backtest" class="backtest"><div><span>区间收益</span><strong>—</strong></div></div><p class="disclaimer">该评估使用当前图表区间、简化持仓规则与未计交易成本的研究模型；不能替代正式回测。</p></section>
+        <section><p class="section-title">策略回测结果</p><div id="backtest" class="backtest"><div><span>策略收益</span><strong>—</strong></div></div><div id="trade-summary" class="trade-summary">等待运行策略回测。</div><p class="disclaimer">回测基于当前可用历史 K 线，以收盘确认、ATR 止损/止盈、固定单笔风险和输入费率估算。它不包含滑点、流动性、资金费率、爆仓、税费或未来数据，不构成交易建议。</p></section>
       </div></aside>
     </section>
 
@@ -65,5 +68,6 @@
   </main>
   <script src="./vendor/lightweight-charts-5.2.1.js"></script>
   <script src="./app.js"></script>
+  <script src="./strategy-lab.js"></script>
 </body>
 </html>
