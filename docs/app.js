@@ -1,20 +1,19 @@
 /* QuantWatch Research Terminal v2 — browser-side charting, watchlists and real-data scans. */
 const API_BASE = 'https://quantwatch-api.2333333434.workers.dev';
-const BINANCE_KLINES = 'https://api.binance.com/api/v3/klines';
 const WATCHLIST_KEY = 'quantwatch:watchlist:v1';
 const PUBLIC_SCAN_LIMIT = 240;
 
 const ASSETS = [
-  { id: 'BTCUSDT', symbol: 'BTC/USDT', name: 'Bitcoin', type: '加密资产', source: 'Binance Spot', mode: 'public-realtime' },
-  { id: 'ETHUSDT', symbol: 'ETH/USDT', name: 'Ethereum', type: '加密资产', source: 'Binance Spot', mode: 'public-realtime' },
-  { id: 'SOLUSDT', symbol: 'SOL/USDT', name: 'Solana', type: '加密资产', source: 'Binance Spot', mode: 'public-realtime' },
-  { id: 'BNBUSDT', symbol: 'BNB/USDT', name: 'BNB', type: '加密资产', source: 'Binance Spot', mode: 'public-realtime' },
-  { id: 'XRPUSDT', symbol: 'XRP/USDT', name: 'XRP', type: '加密资产', source: 'Binance Spot', mode: 'public-realtime' },
-  { id: 'ADAUSDT', symbol: 'ADA/USDT', name: 'Cardano', type: '加密资产', source: 'Binance Spot', mode: 'public-realtime' },
-  { id: 'DOGEUSDT', symbol: 'DOGE/USDT', name: 'Dogecoin', type: '加密资产', source: 'Binance Spot', mode: 'public-realtime' },
-  { id: 'AVAXUSDT', symbol: 'AVAX/USDT', name: 'Avalanche', type: '加密资产', source: 'Binance Spot', mode: 'public-realtime' },
-  { id: 'LINKUSDT', symbol: 'LINK/USDT', name: 'Chainlink', type: '加密资产', source: 'Binance Spot', mode: 'public-realtime' },
-  { id: 'DOTUSDT', symbol: 'DOT/USDT', name: 'Polkadot', type: '加密资产', source: 'Binance Spot', mode: 'public-realtime' },
+  { id: 'BTCUSDT', symbol: 'BTC/USDT', name: 'Bitcoin', type: '加密资产', source: 'CoinGecko OHLC · Cloudflare 缓存', mode: 'public-realtime' },
+  { id: 'ETHUSDT', symbol: 'ETH/USDT', name: 'Ethereum', type: '加密资产', source: 'CoinGecko OHLC · Cloudflare 缓存', mode: 'public-realtime' },
+  { id: 'SOLUSDT', symbol: 'SOL/USDT', name: 'Solana', type: '加密资产', source: 'CoinGecko OHLC · Cloudflare 缓存', mode: 'public-realtime' },
+  { id: 'BNBUSDT', symbol: 'BNB/USDT', name: 'BNB', type: '加密资产', source: 'CoinGecko OHLC · Cloudflare 缓存', mode: 'public-realtime' },
+  { id: 'XRPUSDT', symbol: 'XRP/USDT', name: 'XRP', type: '加密资产', source: 'CoinGecko OHLC · Cloudflare 缓存', mode: 'public-realtime' },
+  { id: 'ADAUSDT', symbol: 'ADA/USDT', name: 'Cardano', type: '加密资产', source: 'CoinGecko OHLC · Cloudflare 缓存', mode: 'public-realtime' },
+  { id: 'DOGEUSDT', symbol: 'DOGE/USDT', name: 'Dogecoin', type: '加密资产', source: 'CoinGecko OHLC · Cloudflare 缓存', mode: 'public-realtime' },
+  { id: 'AVAXUSDT', symbol: 'AVAX/USDT', name: 'Avalanche', type: '加密资产', source: 'CoinGecko OHLC · Cloudflare 缓存', mode: 'public-realtime' },
+  { id: 'LINKUSDT', symbol: 'LINK/USDT', name: 'Chainlink', type: '加密资产', source: 'CoinGecko OHLC · Cloudflare 缓存', mode: 'public-realtime' },
+  { id: 'DOTUSDT', symbol: 'DOT/USDT', name: 'Polkadot', type: '加密资产', source: 'CoinGecko OHLC · Cloudflare 缓存', mode: 'public-realtime' },
   { id: 'AAPL', symbol: 'AAPL', name: 'Apple', type: '股票', source: '待接入授权数据', mode: 'provider-required' },
   { id: 'MSFT', symbol: 'MSFT', name: 'Microsoft', type: '股票', source: '待接入授权数据', mode: 'provider-required' },
   { id: 'NVDA', symbol: 'NVDA', name: 'NVIDIA', type: '股票', source: '待接入授权数据', mode: 'provider-required' },
@@ -123,13 +122,20 @@ function renderResearch() {
 }
 function resetResearchForUnavailable(asset) { resetChart(); $('asset-meta').textContent = `${asset.symbol} · ${asset.name} · ${asset.type} · ${asset.source}`; $('research-mode').textContent = '数据模式：等待用户导入真实CSV'; $('price').textContent = '—'; $('research-time').textContent = '—'; $('research-source').textContent = '需用户导入 CSV 或接入授权数据源'; $('signal').className = 'badge neutral'; $('signal').textContent = '等待数据'; $('signal-score').textContent = '—'; $('strategy-evidence').textContent = '当前资产尚无可用真实 OHLCV 数据。'; $('indicators').innerHTML = '<div class="indicator"><span>等待真实数据</span><strong>—</strong></div>'; $('backtest').innerHTML = '<div><span>区间收益</span><strong>—</strong></div>'; }
 
-async function fetchPublicCandles(asset, limit = 350) { const response = await fetch(`${BINANCE_KLINES}?symbol=${asset.id}&interval=${state.interval}&limit=${limit}`); if (!response.ok) throw new Error(`上游接口 HTTP ${response.status}`); const raw = await response.json(); return raw.map(row => ({ time: Math.floor(Number(row[0]) / 1000), open: Number(row[1]), high: Number(row[2]), low: Number(row[3]), close: Number(row[4]), volume: Number(row[5]) })); }
+async function fetchPublicCandles(asset, limit = 350) {
+  const response = await fetch(`${API_BASE}/api/candles?symbol=${encodeURIComponent(asset.id)}&interval=${encodeURIComponent(state.interval)}&limit=${limit}`);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.message || payload.error || `云端接口 HTTP ${response.status}`);
+  const candles = Array.isArray(payload.candles) ? payload.candles.map(candle => ({ time: Number(candle.time), open: Number(candle.open), high: Number(candle.high), low: Number(candle.low), close: Number(candle.close), volume: Number(candle.volume) || 0 })).filter(candle => [candle.time, candle.open, candle.high, candle.low, candle.close].every(Number.isFinite)) : [];
+  if (candles.length < 60) throw new Error('云端返回的有效 K 线不足 60 根');
+  return { candles, source: payload.source || 'Cloudflare 云端缓存 K线' };
+}
 async function loadCandles() {
   const asset = assetFor(); const imported = state.localSeries.get(asset.id);
   if (imported) { state.candles = imported; state.dataMode = 'user-csv'; state.dataSource = '用户导入 CSV'; $('source-alert').hidden = true; renderResearch(); $('load-status').textContent = `已载入用户导入的 ${state.candles.length} 根真实K线`; return; }
   if (asset.mode !== 'public-realtime') { state.candles = []; $('source-alert').hidden = false; $('source-alert').textContent = `${asset.symbol} 已进入统一资产目录。无密钥模式下，请导入已获授权或个人下载的 OHLCV CSV；导入后可立即使用全部指标、策略、观察列表和轻量回测。`; $('load-status').textContent = '等待用户导入真实CSV数据'; resetResearchForUnavailable(asset); return; }
   state.loading = true; $('load-status').textContent = '正在读取公开交易所K线…'; $('source-alert').hidden = true;
-  try { state.candles = await fetchPublicCandles(asset); state.dataMode = 'public-realtime'; state.dataSource = '公开交易所实时 K线'; renderResearch(); $('load-status').textContent = `已载入 ${state.candles.length} 根 ${state.interval} K线`; } catch (error) { state.candles = []; $('load-status').textContent = `数据读取失败：${error.message}`; $('source-alert').hidden = false; $('source-alert').textContent = '公开数据源暂不可用，请稍后刷新。'; resetResearchForUnavailable(asset); } finally { state.loading = false; }
+  try { const result = await fetchPublicCandles(asset); state.candles = result.candles; state.dataMode = 'public-realtime'; state.dataSource = result.source; renderResearch(); $('load-status').textContent = `已载入 ${state.candles.length} 根 ${state.interval} K线`; } catch (error) { state.candles = []; $('load-status').textContent = `数据读取失败：${error.message}`; $('source-alert').hidden = false; $('source-alert').textContent = 'Cloudflare 公开数据源暂不可用，请稍后刷新。'; resetResearchForUnavailable(asset); } finally { state.loading = false; }
 }
 
 function parseCsv(text) {
@@ -150,7 +156,7 @@ function renderScanResults(results) {
 async function runScan() {
   if (state.scanRunning) return; state.scanRunning = true; const button = $('run-scan'); button.disabled = true; button.textContent = '正在扫描…'; const candidates = ASSETS.filter(asset => asset.mode === 'public-realtime' || state.localSeries.has(asset.id)); const results = []; const failures = [];
   $('scan-status').textContent = `正在以“${STRATEGIES[state.strategy].name}”扫描 ${candidates.length} 个可用标的…`;
-  for (let i = 0; i < candidates.length; i += 3) { const batch = candidates.slice(i, i + 3); const batchResults = await Promise.all(batch.map(async asset => { try { const imported = state.localSeries.get(asset.id); const candles = imported || await fetchPublicCandles(asset, PUBLIC_SCAN_LIMIT); return { ok: true, value: scanRow(asset, candles, imported ? '用户导入 CSV' : '公开交易所 K线') }; } catch (error) { return { ok: false, asset, reason: error instanceof Error ? error.message : '读取失败' }; } })); batchResults.forEach(result => result.ok ? results.push(result.value) : failures.push(result)); $('scan-status').textContent = `正在扫描 ${Math.min(i + batch.length, candidates.length)}/${candidates.length} 个标的…`;
+  for (let i = 0; i < candidates.length; i += 3) { const batch = candidates.slice(i, i + 3); const batchResults = await Promise.all(batch.map(async asset => { try { const imported = state.localSeries.get(asset.id); const remote = imported ? null : await fetchPublicCandles(asset, PUBLIC_SCAN_LIMIT); const candles = imported || remote.candles; return { ok: true, value: scanRow(asset, candles, imported ? '用户导入 CSV' : remote.source) }; } catch (error) { return { ok: false, asset, reason: error instanceof Error ? error.message : '读取失败' }; } })); batchResults.forEach(result => result.ok ? results.push(result.value) : failures.push(result)); $('scan-status').textContent = `正在扫描 ${Math.min(i + batch.length, candidates.length)}/${candidates.length} 个标的…`;
   }
   if (results.length) { renderScanResults(results); $('scan-status').textContent = `已完成：以“${STRATEGIES[state.strategy].name}”得到 ${results.length} 个真实数据研究结果${failures.length ? `；${failures.length} 个标的读取失败` : ''}。数据未上传或持久化。`; } else { $('scan-results').innerHTML = '<tr><td colspan="8" class="empty-state">未能取得可扫描的真实 OHLCV 数据，请检查网络或先导入CSV。</td></tr>'; $('scan-status').textContent = '扫描未取得可用数据。'; }
   state.scanRunning = false; button.disabled = false; button.textContent = '扫描当前策略';
